@@ -11,6 +11,12 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 sys.path.append(".")
 DEVICE_TYPE = os.environ.get("DEVICE_TYPE", "gpu")
 
+#忽略warning
+import warnings
+warnings.filterwarnings("ignore")
+
+
+
 import torch
 if not torch.cuda.is_available() or DEVICE_TYPE == 'npu':
     USE_NPU = True

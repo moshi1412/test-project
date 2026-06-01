@@ -142,3 +142,10 @@ logs/
 *.sqlite
 *.db
 *.mdb
+
+
+*.safetensors
+*.pt
+*.pth
+
+*.egg-info
