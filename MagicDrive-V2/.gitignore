@@ -213,3 +213,6 @@ kernel_meta
 ge_check_op.json
 fusion_result.json
 !tools/fvd/lib
+
+data
+pretrained
