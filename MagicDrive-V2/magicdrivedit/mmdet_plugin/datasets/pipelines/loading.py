@@ -273,6 +273,7 @@ class LoadBEVSegmentation:
         object_classes: Tuple[str, ...] = None,  # object_classes
         aux_data: Tuple[str, ...] = None,  # aux_data for dynamic objects
         cache_file: str = None,
+        map_root: str = None,  # separate root for map files
     ) -> None:
         super().__init__()
         patch_h = ybound[1] - ybound[0]
@@ -290,9 +291,12 @@ class LoadBEVSegmentation:
             [0, 0, 1]
         ])
 
+        # Use map_root if provided, otherwise use dataset_root
+        map_dataset_root = map_root if map_root is not None else dataset_root
+
         self.maps = {}
         for location in LOCATIONS:
-            self.maps[location] = NuScenesMap(dataset_root, location)
+            self.maps[location] = NuScenesMap(map_dataset_root, location)
         if cache_file and os.path.isfile(cache_file):
             logging.info(f"using data cache from: {cache_file}")
             # load to memory and ignore all possible changes.

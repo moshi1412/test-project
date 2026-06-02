@@ -3,7 +3,7 @@
 ############################
 
 # create ann_info
-python tools/prepare_data/create_data.py nuscenes --root-path ./data/nuscenes --out-dir ./data/nuscenes_mmdet3d-12Hz --extra-tag nuscenes_interp_12Hz --max-sweeps -1 --version interp_12Hz_trainval
+python tools/prepare_data/create_data.py nuscenes --root-path /mnt/nuscenes --out-dir /mnt/nuscenes_mmdet3d-12Hz --extra-tag nuscenes_interp_12Hz --max-sweeps -1 --version interp_12Hz_trainval
 cp data/nuscenes_mmdet3d-12Hz/nuscenes_interp_12Hz_infos_train.pkl data/nuscenes_mmdet3d-12Hz/nuscenes_interp_12Hz_infos_train_with_bid.pkl
 cp data/nuscenes_mmdet3d-12Hz/nuscenes_interp_12Hz_infos_val.pkl data/nuscenes_mmdet3d-12Hz/nuscenes_interp_12Hz_infos_val_with_bid.pkl
 

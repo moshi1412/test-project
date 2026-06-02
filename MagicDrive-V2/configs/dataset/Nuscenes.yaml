@@ -1,5 +1,5 @@
 dataset_type: NuScenesDataset
-dataset_root: ./data/nuscenes/
+dataset_root: /mnt/nuscenes/
 dataset_process_root: ./data/nuscenes_mmdet3d_2/  # with visibility
 dataset_cache_file_tag: null
 dataset_cache_dirname: null
@@ -135,6 +135,7 @@ train_pipeline:
   -
     type: LoadBEVSegmentation
     dataset_root: ${...dataset_root}
+    map_root: /mnt/ljy/nuscenes_maps
     xbound: ${...map_bound.x}
     ybound: ${...map_bound.y}
     classes: ${...map_classes}
@@ -205,6 +206,7 @@ test_pipeline:
   -
     type: LoadBEVSegmentation
     dataset_root: ${...dataset_root}
+    map_root: /mnt/ljy/nuscenes_maps
     xbound: ${...map_bound.x}
     ybound: ${...map_bound.y}
     classes: ${...map_classes}

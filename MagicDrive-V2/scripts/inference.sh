@@ -5,9 +5,9 @@
 # `cpu_offload=true` and `scheduler.type=rflow-slice` can be omitted if you have enough GPU memory.
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-GPUS=4
-CFG=configs/magicdrive/inference/
-PATH_TO_MODEL=/mnt/ljy/MagicDrive-V2/ckpts/MagicDriveDiT-stage3-40k-ft/model
+GPUS=1
+CFG=/mnt/ljy/MagicDrive-V2/configs/magicdrive/inference/fullx848x1600_stdit3_CogVAE_boxTDS_wCT_xCE_wSST.py
+PATH_TO_MODEL=/mnt/ljy/MagicDrive-V2/ckpts/MagicDriveDiT-stage3-40k-ft
 FRAME=1
 
 torchrun --standalone --nproc_per_node ${GPUS} scripts/inference_magicdrive.py ${CFG} \

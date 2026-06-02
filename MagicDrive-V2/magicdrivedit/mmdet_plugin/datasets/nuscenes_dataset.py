@@ -250,8 +250,10 @@ class NuScenesDataset(Custom3DDataset):
             data["camera2lidar"] = []
 
             for _, camera_info in info["cams"].items():
-                data["image_paths"].append(camera_info["data_path"])
-
+                # data["image_paths"].append(osp.join(self.dataset_root, camera_info["data_path"]))
+                #debug
+                data["image_paths"].append(osp.join("/mnt/nuscenes", camera_info["data_path"].split("/data/nuscenes/")[-1]))
+                # print(data["image_paths"][-1])
                 # lidar to camera transform
                 lidar2camera_r = np.linalg.inv(camera_info["sensor2lidar_rotation"])
                 lidar2camera_t = (
