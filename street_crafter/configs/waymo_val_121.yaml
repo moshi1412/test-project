@@ -1,6 +1,6 @@
 task: waymo
-source_path: ./data/waymo/121
-exp_name: waymo_val_121
+source_path: ./data/waymo/training_set_processed/000
+exp_name: waymo_000
 resume: True
 
 data:
@@ -8,7 +8,7 @@ data:
     split_test: 2
     type: Waymo
     white_background: True
-    selected_frames: [98, 198]
+    selected_frames: [0, 197]
     cameras: [0]
     extent: 20.
     use_colmap: True

@@ -3,6 +3,7 @@ import numpy as np
 import os
 import pickle
 import cv2
+import tensorflow as tf
 from collections import defaultdict
 from typing import Dict, List, Literal, Tuple, Type
 def image_filename_to_cam(x): return int(x.split('.')[0][-1])
@@ -63,6 +64,117 @@ class ParquetReader:
         paths = glob.glob(f"{self.dataset_dir}/{tag}/{self.context_name}.parquet")
         return dd.read_parquet(paths, npartitions=self.nb_partitions)  # type: ignore
 
+    def __call__(self, tag: str):
+        return self.read(tag)
+
+
+class TFRecordReader:
+    """Reader for Waymo Open Dataset v1 tfrecord files."""
+    
+    def __init__(self, tfrecord_path: str):
+        self.tfrecord_path = tfrecord_path
+        self.frames = None
+        
+    def _load_frames(self):
+        """Load all frames from the tfrecord file."""
+        if self.frames is None:
+            from waymo_open_dataset import dataset_pb2
+            
+            self.frames = []
+            dataset = tf.data.TFRecordDataset(self.tfrecord_path, compression_type='')
+            for data in dataset:
+                frame = dataset_pb2.Frame()
+                frame.ParseFromString(bytearray(data.numpy()))
+                self.frames.append(frame)
+    
+    def read(self, tag: str):
+        """Return frame data as a simple list-based structure similar to parquet dataframe."""
+        self._load_frames()
+        
+        if tag == "lidar":
+            return self._get_lidar_data()
+        elif tag == "lidar_calibration":
+            return self._get_lidar_calibration()
+        elif tag == "lidar_camera_projection":
+            return self._get_lidar_camera_projection()
+        elif tag == "lidar_pose":
+            return self._get_lidar_pose()
+        elif tag == "vehicle_pose":
+            return self._get_vehicle_pose()
+        else:
+            raise ValueError(f"Unknown tag: {tag}")
+    
+    def _get_lidar_data(self):
+        """Extract lidar data from frames."""
+        import pandas as pd
+        
+        data = []
+        for frame in self.frames:
+            for laser in frame.lasers:
+                # In Waymo v1 API, range images are accessed via ri_return1 and ri_return2
+                data.append({
+                    "key.frame_timestamp_micros": frame.timestamp_micros,
+                    "key.laser_name": laser.name,
+                    "range_image_return1": laser.ri_return1,
+                    "range_image_return2": laser.ri_return2,
+                })
+        return pd.DataFrame(data)
+    
+    def _get_lidar_calibration(self):
+        """Extract lidar calibration from the first frame."""
+        import pandas as pd
+        
+        if not self.frames:
+            self._load_frames()
+        
+        data = []
+        frame = self.frames[0]
+        for calib in frame.context.laser_calibrations:
+            data.append({
+                "key.laser_name": calib.name,
+                "calibration": calib,
+            })
+        return pd.DataFrame(data)
+    
+    def _get_lidar_camera_projection(self):
+        """Extract lidar camera projection from frames.
+        
+        Note: In Waymo v1 API, camera projection data is not available in the laser object.
+        This method returns an empty DataFrame, and the caller should handle missing projections.
+        """
+        import pandas as pd
+        
+        # Return empty DataFrame - camera projection is not available in v1 tfrecord format
+        # The caller should handle this by using dummy projections
+        return pd.DataFrame(columns=["key.frame_timestamp_micros", "key.laser_name", 
+                                     "range_image_return1", "range_image_return2"])
+    
+    def _get_lidar_pose(self):
+        """Extract lidar pose from frames."""
+        import pandas as pd
+        
+        data = []
+        for frame in self.frames:
+            for laser in frame.lasers:
+                data.append({
+                    "key.frame_timestamp_micros": frame.timestamp_micros,
+                    "key.laser_name": laser.name,
+                    "range_image_return1": laser.pose,
+                })
+        return pd.DataFrame(data)
+    
+    def _get_vehicle_pose(self):
+        """Extract vehicle pose from frames."""
+        import pandas as pd
+        
+        data = []
+        for frame in self.frames:
+            data.append({
+                "key.frame_timestamp_micros": frame.timestamp_micros,
+                "world_from_vehicle.transform": list(frame.pose.transform),
+            })
+        return pd.DataFrame(data)
+    
     def __call__(self, tag: str):
         return self.read(tag)
 
@@ -257,6 +369,7 @@ def project_label_to_mask(dim, obj_pose, calibration, calibration_dict=None):
 
     return mask
 
+
 def draw_3d_box_on_img(vertices, img, color=(255, 128, 128), thickness=1):
     # Draw the edges of the 3D bounding box
     for k in [0, 1]:
@@ -267,6 +380,7 @@ def draw_3d_box_on_img(vertices, img, color=(255, 128, 128), thickness=1):
     # Draw a cross on the front face to identify front & back.
     for idx1, idx2 in [((1, 0, 0), (1, 1, 1)), ((1, 1, 0), (1, 0, 1))]:
         cv2.line(img, tuple(vertices[idx1]), tuple(vertices[idx2]), color, thickness)
+
 
 def get_lane_shift_direction(ego_frame_poses, frame):
     assert frame >= 0 and frame < len(ego_frame_poses)

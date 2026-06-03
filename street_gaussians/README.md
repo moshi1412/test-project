@@ -57,13 +57,12 @@ python script/waymo/waymo_converter.py --root_dir TRAINING_SET_DIR --save_dir SA
 
 Preprocess the experiment scenes
 ```
-python script/waymo/waymo_converter.py --root_dir VALIDATION_SET_DIR --save_dir SAVE_DIR --split_file script/waymo/waymo_splits/val_dynamic.txt --segment_file script/waymo/waymo_splits/segment_list_val.txt
---track_file TRACKER_PATH
+python script/waymo/waymo_converter.py --root_dir /mnt/ljy/waymo/static32 --save_dir /mnt/ljy/street_gaussians/data --split_file script/waymo/waymo_splits/train_static.txt --segment_file script/waymo/waymo_splits/segment_list_train.txt --track_file /mnt/ljy/street_gaussians/asset/result.json
 ```
 
 Generating LiDAR depth
 ```
-python script/waymo/generate_lidar_depth.py --datadir DATA_DIR
+python script/waymo/generate_lidar_depth.py --datadir /mnt/ljy/street_gaussians/data
 ```
 
 Generating sky mask
@@ -89,7 +88,7 @@ The parameters used are listed in `config.py` as shown [here](https://github.com
 
 ### Training
 ```
-python train.py --config configs/xxxx.yaml
+python train.py --config configs/default.yaml
 ```
 
 Training on example scenes
@@ -99,12 +98,12 @@ bash script/waymo/train_waymo_expample.sh
 
 Training on experiment scenes
 ```
-bash script/waymo/train_waymo_exp.sh
+bash script/train_waymo_exp.sh
 ```
 
 ### Rendering
 ```
-python render.py --config configs/xxxx.yaml mode {evaluate, trajectory}
+python render.py --config configs/default.yaml mode evaluate
 ```
 Rendering on example scenes
 ```

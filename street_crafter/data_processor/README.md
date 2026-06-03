@@ -5,8 +5,7 @@ First download the 1.4.1 version of Waymo dataset (training and validation set),
 Since it is extremely slow for the lidar sensor processing when each scene is stored in the format of `.tfrecord` file, we additionally download part of the 2.0.0 version data. For instance, you need to run the following command under the training set:
 
 ``` shell
-gsutil -m cp -r \                                                  
-  "gs://waymo_open_dataset_v_2_0_0/training/lidar" \
+gsutil -m cp -r "gs://waymo_open_dataset_v_2_0_0/training/lidar" \
   "gs://waymo_open_dataset_v_2_0_0/training/lidar_box" \
   "gs://waymo_open_dataset_v_2_0_0/training/lidar_calibration" \
   "gs://waymo_open_dataset_v_2_0_0/training/lidar_camera_projection" \
@@ -29,9 +28,9 @@ pip install waymo-open-dataset-tf-2-11-0==1.6.0
 
 ``` shell
 python waymo_processor/waymo_converter.py \
-    --root_dir  {ROOT_DIR} \
-    --save_dir  {SAVE_DIR} \
-    --process_list pose calib image track dynamic
+    --root_dir  /mnt/ljy/EmerNeRF/data/waymo/raw \
+    --save_dir  /mnt/ljy/street_crafter/data/waymo \
+    --process_list pose calib image track dynamic lidar
 ```
 
 The processed dataset would be like:
@@ -57,8 +56,8 @@ Convert LiDAR range image into background and actor colored pointcloud and get s
 
 ``` shell
 python waymo_processor/waymo_get_lidar_pcd.py \
-    --root_dir  {ROOT_DIR} \
-    --save_dir  {SAVE_DIR} 
+    --root_dir  /mnt/ljy/EmerNeRF/data/waymo/raw \
+    --save_dir  /mnt/ljy/street_crafter/data/waymo
 ```
     
 The processed LiDAR would be like:
@@ -86,11 +85,11 @@ Render aggregated LiDAR pointcloud to image plane.
 
 ``` shell
 python waymo_processor/waymo_render_lidar_pcd.py \
-    --data_dir {DARA_DIR} \
-    --save_dir {SAVE_DIR} \
+    --data_dir /mnt/ljy/street_crafter/data/waymo \
+    --save_dir /mnt/ljy/street_crafter/data/waymo \
     --delta_frames 10 \
-    --cams 0, \
-    --shifts 0, 
+    --cams 0 \
+    --shifts 0
 ```
 
 Parameter explanation:
@@ -188,6 +187,38 @@ Install GroundingDINO following [this repo](https://github.com/IDEA-Research/Gro
 ```
 python waymo_processor/generate_sky_mask.py --datadir DATA_DIR --sam_checkpoint SAM_CKPT
 ```
+
+### 处理单个场景数据
+
+如果你只想处理部分场景数据（而不是全部），可以参考 EmerNeRF/docs/NOTR.md 的说明下载特定序号的场景。处理单个场景的 LiDAR 数据时，可以使用以下命令：
+
+``` shell
+# 使用 Waymo v1 tfrecord 格式处理单个场景
+python waymo_processor/waymo_get_lidar_pcd.py \
+    --root_dir /mnt/ljy/EmerNeRF/data/waymo/raw \
+    --save_dir /mnt/ljy/street_crafter/data/waymo \
+    --use_v1
+```
+
+**注意事项：**
+
+1. **数据格式选择**：
+   - 默认使用 Waymo v2 parquet 格式（需要提前下载 v2 数据）
+   - 使用 `--use_v1` 参数切换到 Waymo v1 tfrecord 格式
+   - v1 格式需要提前运行 `waymo_converter.py` 生成 images、ego_pose、extrinsics、intrinsics、track 等文件
+
+2. **目录结构**：
+   - 确保 `--root_dir` 下存放原始 tfrecord 文件
+   - 确保 `--save_dir` 下已有 `waymo_converter.py` 生成的处理后数据（如 `000/images/`, `000/track/` 等）
+
+3. **输出文件**：
+   - `lidar/background/{frame:06d}.ply` - 背景点云
+   - `lidar/actor/{track_id}/{frame:06d}.ply` - 动态物体点云
+   - `lidar/depth/{frame:06d}_{cam_id}.npz` - 稀疏深度图
+
+4. **依赖要求**：
+   - 需要安装 `waymo-open-dataset-tf-2-11-0==1.6.0`
+   - 需要 TensorFlow 2.11+ 环境
 
 ## PandaSet
 The processing code of PandaSet is built upon [drivestudio](https://ziyc.github.io/omnire/).

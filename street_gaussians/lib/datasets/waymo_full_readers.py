@@ -43,7 +43,6 @@ def readWaymoFullInfo(path, images='images', split_train=-1, split_test=-1, **kw
     # lidar depth
     lidar_depth_dir = os.path.join(path, 'lidar_depth')
     load_lidar_depth = (cfg.mode == 'train') and os.path.exists(lidar_depth_dir)
-
     output = generate_dataparser_outputs(
         datadir=path, 
         selected_frames=selected_frames,
