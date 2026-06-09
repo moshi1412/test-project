@@ -153,3 +153,5 @@ waymo/
 *.tfrecord
 *.zip
 *.tar.gz
+
+asset/
