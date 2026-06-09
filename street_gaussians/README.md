@@ -70,7 +70,7 @@ Generating sky mask
 Install GroundingDINO following [this repo](https://github.com/IDEA-Research/GroundingDINO) and download SAM checkpoint from [this link](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth).
 
 ```
-python script/waymo/generate_sky_mask.py --datadir DATA_DIR --sam_checkpoint SAM_CKPT
+HF_ENDPOINT=https://hf-mirror.com python script/waymo/generate_sky_mask.py --datadir /mnt/ljy/street_gaussians/data --sam_checkpoint /mnt/ljy/street_gaussians/asset/sam_vit_h_4b8939.pth
 ```
 
 

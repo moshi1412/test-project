@@ -3,7 +3,7 @@
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
 # All rights reserved.
 #
-# This software is free for non-commercial, research and evaluation use 
+# This software is free for non-commercial, research and evaluation use
 # under the terms of the LICENSE.md file.
 #
 # For inquiries contact  george.drettakis@inria.fr
@@ -24,8 +24,9 @@ from lib.datasets.dataset import Dataset
 
 
 def evaluate(split='test'):
+    print(split)
     scene_dir = cfg.model_path
-    dataset = Dataset()
+    dataset = Dataset(scene_idx='003')
     if split == 'test':
         test_dir = Path(scene_dir) / "test"
         cam_infos = dataset.test_cameras[1]
@@ -37,22 +38,15 @@ def evaluate(split='test'):
     
     full_dict = {}
     per_view_dict = {}
-    full_dict_polytopeonly = {}
-    per_view_dict_polytopeonly = {}
     
     print(f"Scene: {scene_dir }")
     full_dict[scene_dir] = {}
     per_view_dict[scene_dir] = {}
-    full_dict_polytopeonly[scene_dir] = {}
-    per_view_dict_polytopeonly[scene_dir] = {}
     
     for method in os.listdir(test_dir):
         print("Method:", method)
         full_dict[scene_dir][method] = {}
         per_view_dict[scene_dir][method] = {}
-        full_dict_polytopeonly[scene_dir][method] = {}
-        per_view_dict_polytopeonly[scene_dir][method] = {}    
-
 
         renders = []
         gts = []
@@ -72,25 +66,45 @@ def evaluate(split='test'):
         psnrs = []
         ssims = []
         lpipss = []
+        valid_names = []
 
         for idx in tqdm(range(len(renders)), desc="Metric evaluation progress"):
             render = renders[idx].cuda()
             gt = gts[idx].cuda()
-            ssims.append(ssim(render, gt))
-            psnrs.append(psnr(render, gt))
-            lpipss.append(lpips(render, gt, net_type='alex'))
+            name = image_names[idx]
+            
+            ssim_val = ssim(render, gt)
+            psnr_val = psnr(render, gt)
+            lpips_val = lpips(render, gt, net_type='alex')
+
+            # ====================== 核心修复 ======================
+            # 如果 PSNR 是 inf，直接跳过，不加入平均
+            if torch.isinf(psnr_val):
+                print(f"跳过 {name} (PSNR=inf)")
+                continue
+            # ======================================================
+            
+            ssims.append(ssim_val)
+            psnrs.append(psnr_val)
+            lpipss.append(lpips_val)
+            valid_names.append(name)
         
-        print("  SSIM : {:>12.7f}".format(torch.tensor(ssims).mean(), ".5"))
-        print("  PSNR : {:>12.7f}".format(torch.tensor(psnrs).mean(), ".5"))
-        print("  LPIPS: {:>12.7f}".format(torch.tensor(lpipss).mean(), ".5"))
+        print(f"有效样本数：{len(psnrs)} / 总样本数：{len(image_names)}")
+        print("  SSIM : {:>12.7f}".format(torch.tensor(ssims).mean()))
+        print("  PSNR : {:>12.7f}".format(torch.tensor(psnrs).mean()))
+        print("  LPIPS: {:>12.7f}".format(torch.tensor(lpipss).mean()))
         print("")
         
-        full_dict[scene_dir][method].update({"SSIM": torch.tensor(ssims).mean().item(),
-                                        "PSNR": torch.tensor(psnrs).mean().item(),
-                                        "LPIPS": torch.tensor(lpipss).mean().item()})
-        per_view_dict[scene_dir][method].update({"SSIM": {name: ssim for ssim, name in zip(torch.tensor(ssims).tolist(), image_names)},
-                                                    "PSNR": {name: psnr for psnr, name in zip(torch.tensor(psnrs).tolist(), image_names)},
-                                                    "LPIPS": {name: lp for lp, name in zip(torch.tensor(lpipss).tolist(), image_names)}})
+        full_dict[scene_dir][method].update({
+            "SSIM": torch.tensor(ssims).mean().item(),
+            "PSNR": torch.tensor(psnrs).mean().item(),
+            "LPIPS": torch.tensor(lpipss).mean().item()
+        })
+        per_view_dict[scene_dir][method].update({
+            "SSIM": {name: ssim for ssim, name in zip(torch.tensor(ssims).tolist(), valid_names)},
+            "PSNR": {name: psnr for psnr, name in zip(torch.tensor(psnrs).tolist(), valid_names)},
+            "LPIPS": {name: lp for lp, name in zip(torch.tensor(lpipss).tolist(), valid_names)}
+        })
 
     with open(scene_dir + f"/results_{split}.json", 'w') as fp:
         json.dump(full_dict[scene_dir], fp, indent=True)

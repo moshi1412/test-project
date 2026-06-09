@@ -21,7 +21,7 @@ cfg.resume = True # If set to True, resume training from the last checkpoint.
 cfg.to_cuda = False # higher GPU utilization with larger memory required
 
 cfg.source_path = ''
-cfg.model_path = ''
+cfg.model_path = '/mnt/ljy/street_gaussians/output/waymo_static_with_depth_sky/waymo_static'
 cfg.record_dir = None
 cfg.resolution = -1
 cfg.resolution_scales = [1]
@@ -29,8 +29,8 @@ cfg.resolution_scales = [1]
 cfg.eval = CN()
 cfg.eval.skip_train = False 
 cfg.eval.skip_test = False 
-cfg.eval.eval_train = False
-cfg.eval.eval_test = True
+cfg.eval.eval_train = True
+cfg.eval.eval_test = False
 cfg.eval.quiet = False
 
 cfg.train = CN()

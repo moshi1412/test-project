@@ -84,9 +84,9 @@ not fully tested the effectiveness of this type of guidance.
 Render aggregated LiDAR pointcloud to image plane.
 
 ``` shell
-python waymo_processor/waymo_render_lidar_pcd.py \
-    --data_dir /mnt/ljy/street_crafter/data/waymo \
-    --save_dir /mnt/ljy/street_crafter/data/waymo \
+python waymo_processor/waymo_render_lidar_pcd_v2.py \
+    --data_dir /mnt/ljy/street_crafter/data/waymo/training_set_processed \
+    --save_dir /mnt/ljy/street_crafter/data/waymo/training_set_processed \
     --delta_frames 10 \
     --cams 0 \
     --shifts 0

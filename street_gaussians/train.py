@@ -84,13 +84,13 @@ def training(scene_idx):
         if 'lidar_depth' in viewpoint_cam.guidance:
             lidar_depth = viewpoint_cam.guidance['lidar_depth']
             lidar_depth = lidar_depth.cuda(non_blocking=True) if not lidar_depth.is_cuda else lidar_depth
-        else:
-            lidar_depth = None
+        # else:
+        #     lidar_depth = None
         if 'sky_mask' in viewpoint_cam.guidance:
             sky_mask = viewpoint_cam.guidance['sky_mask']
             sky_mask = sky_mask.cuda(non_blocking=True) if not sky_mask.is_cuda else sky_mask
-        else:
-            sky_mask = None
+        # else:
+        #     sky_mask = None
         if 'obj_bound' in viewpoint_cam.guidance:
             obj_bound = viewpoint_cam.guidance['obj_bound']
             obj_bound = obj_bound.cuda(non_blocking=True) if not obj_bound.is_cuda else obj_bound

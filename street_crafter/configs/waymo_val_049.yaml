@@ -1,6 +1,7 @@
 parent_cfg: configs/waymo_val_121.yaml
-source_path: ./data/waymo/049
-exp_name: waymo_val_049
+source_path: ./data/waymo/training_set_processed/049
+exp_name: waymo_val_049 
+trained_model_dir: /mnt/ljy/street_crafter/video_diffusion/ckpts/vista_condition_high_res_mix_v2.safetensors
 
 data:
     selected_frames: [93, 193]

@@ -1,4 +1,4 @@
-task: waymo_static
+task: waymo_static_with_depth_sky
 source_path: /mnt/ljy/street_gaussians/data
 exp_name: waymo_static
 to_cuda: true # move training cameras to GPU 
@@ -26,9 +26,9 @@ model:
     include_obj: true
     include_sky: true
     opt_track: true
-  # sky:
-  #   resolution: 1024
-  #   white_background: false  # set the default color based on the current time of day
+  sky:
+    resolution: 1024
+    white_background: false  # set the default color based on the current time of day
 
 train:
   iterations: 30000

@@ -1,6 +1,6 @@
 task: waymo
 source_path: ./data/waymo/training_set_processed/000
-exp_name: waymo_000
+exp_name: waymo_000_v2
 resume: True
 
 data:
