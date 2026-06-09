@@ -39,6 +39,7 @@ class ActorPose(nn.Module):
         
     def load_state_dict(self, state_dict):
         if self.opt_track:
+<<<<<<< HEAD
             # Handle size mismatch between checkpoint and current model
             checkpoint_params = state_dict['params']
             current_params = self.state_dict()
@@ -58,6 +59,11 @@ class ActorPose(nn.Module):
                     self.optimizer.load_state_dict(state_dict['optimizer'])
                 except:
                     print("Warning: Could not load optimizer state due to size mismatch")
+=======
+            super().load_state_dict(state_dict['params'])
+            if cfg.mode == 'train' and 'optimizer' in state_dict:
+                self.optimizer.load_state_dict(state_dict['optimizer'])
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 
     def training_setup(self):
         args = cfg.optim

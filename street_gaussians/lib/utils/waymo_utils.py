@@ -445,7 +445,11 @@ def generate_dataparser_outputs(
     colmap_basedir = os.path.join(f'{cfg.model_path}/colmap')
     if not os.path.exists(os.path.join(colmap_basedir, 'triangulated/sparse/model')):
         from script.waymo.colmap_waymo_full import run_colmap_waymo
+<<<<<<< HEAD
         run_colmap_waymo(result,datadir)
+=======
+        run_colmap_waymo(result)
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     
     if build_pointcloud:
         print('build point cloud')

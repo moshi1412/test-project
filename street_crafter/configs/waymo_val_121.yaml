@@ -1,6 +1,11 @@
 task: waymo
+<<<<<<< HEAD
 source_path: ./data/waymo/training_set_processed/000
 exp_name: waymo_000_v2
+=======
+source_path: ./data/waymo/121
+exp_name: waymo_val_121
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 resume: True
 
 data:
@@ -8,7 +13,11 @@ data:
     split_test: 2
     type: Waymo
     white_background: True
+<<<<<<< HEAD
     selected_frames: [0, 197]
+=======
+    selected_frames: [98, 198]
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     cameras: [0]
     extent: 20.
     use_colmap: True

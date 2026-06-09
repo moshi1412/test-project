@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # import sys
 # import os
 # import numpy as np
@@ -317,6 +318,8 @@
 
 
 
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 import sys
 import os
 import numpy as np
@@ -353,7 +356,11 @@ class WaymoLiDARRenderer(object):
     def read_lidar_ply(self, lidar_dir, ego_poses, trajectory):
         ply_dict = dict()
 
+<<<<<<< HEAD
        # read background ply
+=======
+        # read background ply
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
         lidar_background_dir = os.path.join(lidar_dir, 'background')
         ply_dict_background = dict()
 
@@ -362,6 +369,7 @@ class WaymoLiDARRenderer(object):
             bkgd_ply = fetchPly(bkgd_ply_path)
 
             mask = bkgd_ply.mask
+<<<<<<< HEAD
             xyz_vehicle = bkgd_ply.points[mask]  # 车体坐标系
             xyz_vehicle_homo = np.concatenate([xyz_vehicle, np.ones_like(xyz_vehicle[..., :1])], axis=-1)
             frame = image_filename_to_frame(os.path.basename(bkgd_ply_path))
@@ -375,13 +383,35 @@ class WaymoLiDARRenderer(object):
         lidar_actor_dir = os.path.join(lidar_dir, 'actor')
         for track_id in os.listdir(lidar_actor_dir):
             ply_dict_actor = dict()
+=======
+            xyz_vehicle = bkgd_ply.points[mask]
+            xyz_vehicle_homo = np.concatenate([xyz_vehicle, np.ones_like(xyz_vehicle[..., :1])], axis=-1)
+            frame = image_filename_to_frame(os.path.basename(bkgd_ply_path))
+            xyz_world = xyz_vehicle_homo @ ego_poses[frame].T
+            xyz_world = xyz_world[..., :3]
+            rgb = bkgd_ply.colors[mask]
+            ply_dict_background[frame] = np.concatenate([xyz_world, rgb], axis=-1)
+
+        ply_dict['background'] = ply_dict_background
+
+        # read actor lidar
+        lidar_actor_dir = os.path.join(lidar_dir, 'actor')
+        for track_id in os.listdir(lidar_actor_dir):
+            ply_dict_actor = dict()
+
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
             lidar_actor_dir_ = os.path.join(lidar_actor_dir, track_id)
             actor_ply_list = sorted([os.path.join(lidar_actor_dir_, f) for f in os.listdir(lidar_actor_dir_)
                                      if f.endswith('.ply') and f != 'full.ply'])
             for actor_ply_path in actor_ply_list:
                 frame = image_filename_to_frame(os.path.basename(actor_ply_path))
                 actor_ply = fetchPly(actor_ply_path)
+<<<<<<< HEAD
                 mask = np.ones(actor_ply.points.shape[0], dtype=bool)
+=======
+                mask = actor_ply.mask
+
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
                 if mask.sum() == 0:
                     continue
 
@@ -404,6 +434,10 @@ class WaymoLiDARRenderer(object):
                     rgb = np.concatenate([rgb, rgb_flip], axis=0)
 
                 ply_dict_actor[frame] = np.concatenate([xyz, rgb], axis=-1)
+<<<<<<< HEAD
+=======
+
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
             ply_dict[track_id] = ply_dict_actor
 
         return ply_dict
@@ -421,7 +455,11 @@ class WaymoLiDARRenderer(object):
         bkgd_ply = []
         for frame in range(start_frame, end_frame + 1):
             bkgd_ply.append(ply_dict['background'][frame])
+<<<<<<< HEAD
         bkgd_ply = np.concatenate(bkgd_ply, axis=0)
+=======
+        bkgd_ply = np.concatenate(bkgd_ply, axis=0)  # [N, xyz + rgb]
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
         ply_frame_dict['background'] = bkgd_ply
 
         for track_id in ply_dict.keys():
@@ -432,9 +470,19 @@ class WaymoLiDARRenderer(object):
                 if frame not in ply_dict[track_id]:
                     continue
                 actor_ply.append(ply_dict[track_id][frame])
+<<<<<<< HEAD
             if len(actor_ply) == 0:
                 continue
             actor_ply = np.concatenate(actor_ply, axis=0)
+=======
+
+            # empty actor ply
+            if len(actor_ply) == 0:
+                continue
+
+            actor_ply = np.concatenate(actor_ply, axis=0)
+
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
             ply_frame_dict[track_id] = actor_ply
         return ply_frame_dict
 
@@ -454,9 +502,17 @@ class WaymoLiDARRenderer(object):
         return True
 
     def render(self):
+<<<<<<< HEAD
         print("Start rendering ...")
         id_list = self.scene_ids
         render_fn = self.render_one
+=======
+        """Convert action."""
+        print("Start rendering ...")
+        id_list = self.scene_ids
+        render_fn = self.render_one
+
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
         chunk = 32
         for i in range(0, len(id_list), chunk):
             print(f"\nProcessing scenes {i:03d} to {min(i+chunk-1, len(id_list)-1):03d} ...")
@@ -471,6 +527,7 @@ class WaymoLiDARRenderer(object):
         return save_dir
 
     def render_one(self, scene_idx):
+<<<<<<< HEAD
         scene_dir = os.path.join(self.data_dir, str(scene_idx).zfill(3))
         ego_frame_poses, ego_cam_poses = load_ego_poses(datadir=scene_dir)
         extrinsics, intrinsics = load_calibration(datadir=scene_dir)
@@ -480,6 +537,30 @@ class WaymoLiDARRenderer(object):
         gpu_id = self.gpus[scene_idx % len(self.gpus)]
         print('Using GPU:', gpu_id)
 
+=======
+        """Project action for single file."""
+        scene_dir = os.path.join(self.data_dir, str(scene_idx).zfill(3))
+
+        # load camera poses
+        ego_frame_poses, ego_cam_poses = load_ego_poses(datadir=scene_dir)
+
+        # load calibration
+        extrinsics, intrinsics = load_calibration(datadir=scene_dir)
+
+        # load tracks
+        track_info, _, trajectory = load_track(scene_dir)
+
+        lidar_dir = os.path.join(scene_dir, 'lidar')
+        lidar_render_dir = os.path.join(lidar_dir, self.save_dir)
+
+        os.makedirs(lidar_render_dir, exist_ok=True)
+        num_frames = len(ego_frame_poses)
+        
+        # gpu_id
+        gpu_id = self.gpus[scene_idx % len(self.gpus)]
+        print('Using GPU:', gpu_id)
+        
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
         for cam in self.cams:
             print(f'Processing scene {scene_idx:03d}, camera {cam}')
             ply_dict = self.read_lidar_ply(lidar_dir=lidar_dir, ego_poses=ego_frame_poses, trajectory=trajectory)
@@ -498,6 +579,7 @@ class WaymoLiDARRenderer(object):
                     track_info_frame = track_info[f'{frame:06d}']
                     ego_pose = ego_cam_poses[cam, frame]
 
+<<<<<<< HEAD
                     # ===================== 【核心：背景直接用，不做任何变换】 =====================
                     ply_frame_dict = self.make_lidar_ply(ply_dict, start_frame, end_frame)
                     bkgd_ply = ply_frame_dict.pop('background')
@@ -507,6 +589,21 @@ class WaymoLiDARRenderer(object):
                         if track_id not in track_info_frame:
                             continue
                         box = track_info_frame[track_id]['lidar_box']
+=======
+                    # step1: get point cloud xyz and rgb
+                    ply_frame_dict = self.make_lidar_ply(ply_dict, start_frame=start_frame, end_frame=end_frame)                    
+                    ply_frame = [ply_frame_dict.pop('background')]
+                    for track_id, ply_actor_frame in ply_frame_dict.items():
+                        if track_id not in track_info_frame:
+                            continue
+
+                        if shift == 0:
+                            camera_box = track_info_frame[track_id]['camera_box']
+                            lidar_box = track_info_frame[track_id]['lidar_box']
+                            box = camera_box if camera_box is not None else lidar_box  # align with training set
+                        else:
+                            box = track_info_frame[track_id]['lidar_box']
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 
                         pose_vehicle = np.eye(4)
                         pose_vehicle[:3, :3] = np.array([
@@ -518,6 +615,7 @@ class WaymoLiDARRenderer(object):
                         pose_vehicle = ego_pose @ pose_vehicle
                         ply_actor_frame = self.transform_lidar_ply(ply_actor_frame, pose_vehicle)
                         ply_frame.append(ply_actor_frame)
+<<<<<<< HEAD
 
                     ply_frame = np.concatenate(ply_frame, axis=0)
                     ply_xyz, ply_rgb = ply_frame[..., :3], ply_frame[..., 3:]
@@ -526,17 +624,32 @@ class WaymoLiDARRenderer(object):
                     ego_pose_shift = ego_pose.copy()
                     lane_shift_direction = get_lane_shift_direction(ego_frame_poses, frame)
                     lane_shift_sign = LANE_SHIFT_SIGN[f'{scene_idx:03d}']
+=======
+                    ply_frame = np.concatenate(ply_frame, axis=0)
+                    ply_xyz, ply_rgb = ply_frame[..., :3], ply_frame[..., 3:]
+
+                    # step2: modify camera pose
+                    ego_pose_shift = ego_pose.copy()
+                    lane_shift_direction = get_lane_shift_direction(ego_frame_poses, frame)
+                    lane_shift_sign = LANE_SHIFT_SIGN[f'{scene_idx:03d}']
+
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
                     ego_pose_shift[:3, 3] += lane_shift_sign * lane_shift_direction * shift
                     c2w = ego_pose_shift @ extrinsics[cam]
                     w2c = np.linalg.inv(c2w)
                     ixt = intrinsics[cam]
                     h, w = image_heights[cam], image_widths[cam]
 
+<<<<<<< HEAD
                     # ===================== 【关闭深度过滤，防止全黑】 =====================
+=======
+                    # step3: filter out invisible points
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
                     ply_xyz_cam = np.dot(ply_xyz, w2c[:3, :3].T) + w2c[:3, 3:].T
                     ply_depth = ply_xyz_cam[:, 2]
                     ply_pixel = np.dot(ply_xyz_cam, ixt.T)
                     ply_pixel = ply_pixel[:, :2] / ply_pixel[:, 2:]
+<<<<<<< HEAD
 
                     ply_valid = (
                         (ply_pixel[:, 0] >= 0) &
@@ -546,12 +659,24 @@ class WaymoLiDARRenderer(object):
                     )
 
                     ply_pixel = ply_pixel[ply_valid]
+=======
+                    ply_valid = (
+                        (ply_depth > 1e-3)
+                        & (ply_pixel[:, 0] >= 0)
+                        & (ply_pixel[:, 0] < w)
+                        & (ply_pixel[:, 1] >= 0)
+                        & (ply_pixel[:, 1] < h),
+                    )[0]
+                    ply_pixel = ply_pixel[ply_valid]
+                    ply_pixel = np.round(ply_pixel).astype(np.int32)
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
                     valid_ply_depth = ply_depth[ply_valid]
                     valid_ply_rgb = ply_rgb[ply_valid]
                     valid_ply_mask = np.ones_like(valid_ply_depth)
                     valid_ply_feature = np.concatenate([valid_ply_rgb, valid_ply_depth[:, None], valid_ply_mask[:, None]], axis=-1)
                     valid_ply_xyz = ply_xyz[ply_valid]
 
+<<<<<<< HEAD
                     # ===================== 【点大小放大，绝对能看见】 =====================
                     ply_render = render_pointcloud_diff_point_rasterization(
                         c2w, ixt, valid_ply_xyz, valid_ply_feature, h, w, gpu_id,
@@ -568,26 +693,60 @@ class WaymoLiDARRenderer(object):
                     cv2.imwrite(image_render_save_path, (ply_render_rgb[..., [2, 1, 0]] * 255).astype(np.uint8))
                     cv2.imwrite(mask_render_save_path, (ply_render_mask * 255).astype(np.uint8))
                     np.save(depth_render_save_path, ply_render_depth)
+=======
+                    # step4: render point cloud
+                    ply_render = render_pointcloud_diff_point_rasterization(c2w, ixt, valid_ply_xyz, valid_ply_feature, h, w, gpu_id, use_ndc_scale=True, scale=0.01)
+                    # ply_render = render_pointcloud_pytorch3d(c2w, ixt, valid_ply_xyz, valid_ply_feature, h, w, gpu_id)
+                    ply_render_rgb, ply_render_mask = ply_render[0, ..., :3], ply_render[0, ..., 3]
+                    ply_render_rgb = ply_render_rgb.detach().cpu().numpy()
+                    ply_render_mask = ply_render_mask.detach().cpu().numpy()
+
+                    image_render_save_path = os.path.join(render_save_dir, f'{str(frame).zfill(6)}_{cam}.png')
+                    mask_render_save_path = os.path.join(render_save_dir, f'{str(frame).zfill(6)}_{cam}_mask.png')
+
+                    image_render = (ply_render_rgb * 255).astype(np.uint8)
+                    cv2.imwrite(image_render_save_path, image_render[..., [2, 1, 0]])
+
+                    mask_render = (ply_render_mask * 255).astype(np.uint8)
+                    cv2.imwrite(mask_render_save_path, mask_render)
+
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
                     ply_render_result_rgb.append(ply_render_rgb)
 
                 image_video_save_path = os.path.join(render_save_dir, f'render_rgb_{cam}.mp4')
                 imageio.mimwrite(image_video_save_path, [(x * 255).astype(np.uint8) for x in ply_render_result_rgb], fps=10)
+<<<<<<< HEAD
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='./waymo_processor/training_set_processed')
     parser.add_argument('--skip_existing', action='store_true')
+=======
+            
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_dir', type=str, default='./waymo_processor/training_set_processed')
+    parser.add_argument('--skip_existing', action='store_true', help='Skip existing files')
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     parser.add_argument('--delta_frames', type=int, default=10)
     parser.add_argument('--cams', type=int, nargs='+', default=[0])
     parser.add_argument('--gpus', type=int, nargs='+', default=[0])
     parser.add_argument('--workers', type=int, default=1)
     parser.add_argument('--save_dir', type=str, default='color_render')
     parser.add_argument('--shifts', type=int, nargs='+', default=[0])
+<<<<<<< HEAD
     args = parser.parse_args()
 
     data_dir = args.data_dir
     # ✅ 修复：只加载 纯数字命名的文件夹
     scene_ids = sorted([int(x) for x in os.listdir(data_dir) if x.isdigit()])
+=======
+
+    args = parser.parse_args()
+    data_dir = args.data_dir
+    scene_ids = sorted([x for x in os.listdir(data_dir)])
+    scene_ids = [int(x) for x in scene_ids]
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     dataset_projector = WaymoLiDARRenderer(args, scene_ids)
     if args.workers == 1:
         for scene_idx in scene_ids:
@@ -595,5 +754,11 @@ def main():
     else:
         dataset_projector.render()
 
+<<<<<<< HEAD
 if __name__ == '__main__':
     main()
+=======
+
+if __name__ == '__main__':
+    main()
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf

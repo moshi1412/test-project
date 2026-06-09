@@ -54,7 +54,11 @@ The pretrained model weights can be downloaded from this [link](https://drive.go
 
 Inference video diffusion model
 ```
+<<<<<<< HEAD
 python render.py --config /mnt/ljy/street_crafter/configs/waymo_val_049.yaml mode diffusion
+=======
+python render.py --config /mnt/ljy/street_crafter/configs/waymo_val_121.yaml mode diffusion
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 ```
 
 We also provide another option for inference by setting the meta info file path.

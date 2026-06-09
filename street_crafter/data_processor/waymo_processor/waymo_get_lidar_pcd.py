@@ -4,6 +4,7 @@ import cv2
 import math
 import argparse
 import sys
+<<<<<<< HEAD
 from PIL import Image
 from tqdm import tqdm
 
@@ -11,6 +12,12 @@ sys.path.append(os.getcwd())
 from waymo_open_dataset import dataset_pb2, label_pb2
 from waymo_open_dataset.utils import range_image_utils, transform_utils
 from waymo_open_dataset.utils import frame_utils
+=======
+# import open3d as o3d
+from PIL import Image
+from tqdm import tqdm
+
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 from waymo_open_dataset import v2
 from waymo_open_dataset.v2.perception.utils.lidar_utils import convert_range_image_to_cartesian
 from waymo_open_dataset.v2.perception import (
@@ -21,7 +28,13 @@ from waymo_open_dataset.v2.perception import (
     pose as _v2_pose,
 )
 
+<<<<<<< HEAD
 from waymo_helpers import load_calibration, load_track, get_object, ParquetReader, TFRecordReader, load_ego_poses
+=======
+sys.path.append(os.getcwd())
+from waymo_open_dataset import dataset_pb2, label_pb2
+from waymo_helpers import load_calibration, load_track, get_object, ParquetReader, load_ego_poses
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 from utils.img_utils import visualize_depth_numpy
 from utils.box_utils import bbox_to_corner3d, inbbox_points
 from utils.pcd_utils import storePly, fetchPly
@@ -42,6 +55,7 @@ np.set_printoptions(precision=4, suppress=True)
 import transforms3d
 from copy import deepcopy
 
+<<<<<<< HEAD
 def convert_range_image_to_point_cloud_v1(
     range_image,
     calibration,
@@ -195,6 +209,104 @@ def save_lidar_v1(root_dir, seq_path, seq_save_dir):
         except: pass
 def save_lidar_v2(root_dir, seq_path, seq_save_dir):
     """Process LiDAR data from v2 parquet format (original implementation)."""
+=======
+def convert_range_image_to_point_cloud(
+    range_image: _v2_lidar.RangeImage,
+    calibration: _v2_context.LiDARCalibrationComponent,
+    pixel_pose: Optional[_v2_lidar.PoseRangeImage] = None,
+    frame_pose: Optional[_v2_pose.VehiclePoseComponent] = None,
+    keep_polar_features=False,
+) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    """Converts one range image from polar coordinates to point cloud.
+        same as in wod api, but return the mask in addition plus channel id
+
+    Args:
+        range_image: One range image return captured by a LiDAR sensor.
+        calibration: Parameters for calibration of a LiDAR sensor.
+        pixel_pose: If not none, it sets pose for each range image pixel.
+        frame_pose: This must be set when `pose` is set.
+        keep_polar_features: If true, keep the features from the polar range image
+        (i.e. range, intensity, and elongation) as the first features in the
+        output range image.
+
+    Returns:
+        A 3 [N, D] tensor of 3D LiDAR points. D will be 3 if keep_polar_features is
+        False (x, y, z) and 6 if keep_polar_features is True (range, intensity,
+        elongation, x, y, z).
+            1. Lidar points-cloud
+            2. Missing points points-cloud
+            3. Range image mask above dummy distance.
+
+    """
+
+    # missing points are found directly from range image
+    val_clone = deepcopy(range_image.tensor.numpy())  # type: ignore
+    no_return = val_clone[..., 0] == -1  # where range is -1
+    val_clone[..., 0][no_return] = DUMMY_DISTANCE_VALUE
+    # re-assign the field
+    object.__setattr__(range_image, "values", val_clone.flatten())
+
+    if pixel_pose is not None:
+        assert frame_pose is not None
+        # From range image, missing points do not have a pose.
+        # So we replace their pose with the vehicle pose.
+        # pixel pose & frame pose
+        pixel_pose_clone = deepcopy(pixel_pose.tensor.numpy())  # type: ignore
+        pixel_pose_mask = pixel_pose_clone[..., 0] == 0
+        tr_orig = frame_pose.world_from_vehicle.transform.reshape(4, 4)  # type: ignore
+        rot = tr_orig[:3, :3]
+        x, y, z = tr_orig[:3, 3]
+        yaw, pitch, roll = transforms3d.euler.mat2euler(rot, "szyx")
+        # ` [roll, pitch, yaw, x, y, z]`
+        pixel_pose_clone[..., 0][pixel_pose_mask] = roll
+        pixel_pose_clone[..., 1][pixel_pose_mask] = pitch
+        pixel_pose_clone[..., 2][pixel_pose_mask] = yaw
+        pixel_pose_clone[..., 3][pixel_pose_mask] = x
+        pixel_pose_clone[..., 4][pixel_pose_mask] = y
+        pixel_pose_clone[..., 5][pixel_pose_mask] = z
+        # re-assign the field
+        object.__setattr__(pixel_pose, "values", pixel_pose_clone.flatten())
+
+    range_image_cartesian = convert_range_image_to_cartesian(
+        range_image=range_image,
+        calibration=calibration,
+        pixel_pose=pixel_pose,
+        frame_pose=frame_pose,
+        keep_polar_features=keep_polar_features,
+    )
+
+    range_image_tensor = range_image.tensor
+    range_image_mask = DUMMY_DISTANCE_VALUE / 2 > range_image_tensor[..., 0]  # 0  # type: ignore
+    points_tensor = tf.gather_nd(range_image_cartesian, tf.compat.v1.where(range_image_mask))
+    missing_points_tensor = tf.gather_nd(range_image_cartesian, tf.compat.v1.where(~range_image_mask))
+
+    return points_tensor, missing_points_tensor, range_image_mask
+
+def extract_pointwise_camera_projection(
+    range_image: _v2_lidar.RangeImage,
+    camera_projection: _v2_lidar.CameraProjectionRangeImage,
+) -> tf.Tensor:
+  """Extracts information about where in camera images each point is projected.
+
+  Args:
+    range_image: One range image return captured by a LiDAR sensor.
+    camera_projection: LiDAR point to camera image projections.
+
+  Returns:
+    A [N, 6] tensor of camera projection per point. See
+      lidar.CameraProjectionRangeImage for definitions of inner dimensions.
+  """
+  range_image_tensor = range_image.tensor
+  range_image_mask = DUMMY_DISTANCE_VALUE / 2 > range_image_tensor[..., 0]  # 0  # type: ignore
+  camera_project_tensor = camera_projection.tensor
+  pointwise_camera_projection_tensor = tf.gather_nd(camera_project_tensor, tf.compat.v1.where(range_image_mask))
+  missing_points_camera_projection_tensor = tf.gather_nd(camera_project_tensor, tf.compat.v1.where(~range_image_mask))
+
+  return pointwise_camera_projection_tensor, missing_points_camera_projection_tensor, range_image_mask
+
+
+def save_lidar(root_dir, seq_path, seq_save_dir):
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     track_info, track_camera_visible, trajectory = load_track(seq_save_dir)
     extrinsics, intrinsics = load_calibration(seq_save_dir)
     print(f'Processing sequence {seq_path}...')
@@ -332,6 +444,20 @@ def save_lidar_v2(root_dir, seq_path, seq_save_dir):
             
             np.savez_compressed(depth_filename, mask=valid_depth_pixel, value=valid_depth_value)
             
+<<<<<<< HEAD
+=======
+            # missing_uv, mask = project_numpy(
+            #     xyz=missing_xyzs, 
+            #     K=intrinsics[i], 
+            #     RT=np.linalg.inv(c2w), 
+            #     H=h, W=w
+            # )
+            # missing_u = np.clip(missing_uv[mask, 0], 0, w-1).astype(np.int32)
+            # missing_v = np.clip(missing_uv[mask, 1], 0, h-1).astype(np.int32)
+            # missing_mask = np.zeros_like(valid_depth_pixel, dtype=np.bool_)
+            # missing_mask[missing_v, missing_u] = True
+                        
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
             try:
                 if i == 0:
                     depth = depth.reshape(h, w).astype(np.float32)
@@ -345,12 +471,20 @@ def save_lidar_v2(root_dir, seq_path, seq_save_dir):
             # Colorize 
             mask_rgb = (camera_id == i+1)
             if mask_rgb.sum() != 0:
+<<<<<<< HEAD
+=======
+                # use the first projected camera
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
                 u_rgb, v_rgb = camera_projections[mask_rgb, 1], camera_projections[mask_rgb, 2]
                 u_rgb = np.clip(u_rgb, 0, w-1).astype(np.int32)
                 v_rgb = np.clip(v_rgb, 0, h-1).astype(np.int32)
                 rgb = image[v_rgb, u_rgb]
                 rgbs[mask_rgb] = rgb
+<<<<<<< HEAD
         
+=======
+            
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
         actor_mask = np.zeros(xyzs.shape[0], dtype=np.bool_)
         track_info_frame = track_info[f'{frame_id:06d}']
         for track_id, track_info_actor in track_info_frame.items():
@@ -387,7 +521,11 @@ def save_lidar_v2(root_dir, seq_path, seq_save_dir):
             try:
                 storePly(ply_actor_path, xyzs_inbbox, rgbs_inbbox, masks_inbbox)
             except:
+<<<<<<< HEAD
                 pass
+=======
+                pass # No pcd
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 
         xyzs_background = xyzs[~actor_mask]
         rgbs_background = rgbs[~actor_mask]
@@ -407,6 +545,7 @@ def save_lidar_v2(root_dir, seq_path, seq_save_dir):
         try:
             storePly(ply_actor_path_full, xyzs, rgbs, masks)
         except:
+<<<<<<< HEAD
             pass
 
 def convert_range_image_to_point_cloud(
@@ -465,12 +604,56 @@ def extract_pointwise_camera_projection(
 
     return pointwise_camera_projection_tensor, missing_points_camera_projection_tensor, range_image_mask
 
+=======
+            pass # No pcd
+            
+    # read per frame background LiDAR
+    # lidar_bkgd_dir = os.path.join(seq_save_dir, 'lidar', 'background')
+    # bkgd_ply_list = sorted([os.path.join(lidar_bkgd_dir, f) for f in os.listdir(lidar_bkgd_dir) if f.endswith('.ply') and f != 'full.ply'])
+    # bkgd_ply_xyz = []
+    # bkgd_ply_rgb = []
+    # for bkgd_ply_path in tqdm(bkgd_ply_list, desc='Reading background LiDAR'):
+    #     frame = int(os.path.basename(bkgd_ply_path).split('.')[0])
+    
+    #     ply_curframe = fetchPly(bkgd_ply_path)
+    #     mask = ply_curframe.mask
+    #     xyz_vehicle = ply_curframe.points[mask]
+    #     xyz_vehicle_homo = np.concatenate([xyz_vehicle, np.ones_like(xyz_vehicle[..., :1])], axis=-1)
+    #     xyz_world = xyz_vehicle_homo @ ego_frame_poses[frame].T
+    #     xyz_world = xyz_world[..., :3]
+    #     rgb = ply_curframe.colors[mask]
+ 
+    #     bkgd_ply_xyz.append(xyz_world)
+    #     bkgd_ply_rgb.append(rgb)
+    
+    # # raw pointcloud
+    # bkgd_ply_xyz = np.concatenate(bkgd_ply_xyz, axis=0)
+    # bkgd_ply_rgb = np.concatenate(bkgd_ply_rgb, axis=0)
+
+    # # downsample
+    # print('Downsample background LiDAR')
+    # bkgd_ply = o3d.geometry.PointCloud()
+    # bkgd_ply.points = o3d.utility.Vector3dVector(bkgd_ply_xyz)
+    # bkgd_ply.colors = o3d.utility.Vector3dVector(bkgd_ply_rgb)
+    # bkgd_ply = bkgd_ply.voxel_down_sample(voxel_size=0.15)
+    # bkgd_ply, _ = bkgd_ply.remove_radius_outlier(nb_points=10, radius=0.5)
+    # bkgd_ply_xyz = np.asarray(bkgd_ply.points).astype(np.float32)
+    # bkgd_ply_rgb = np.asarray(bkgd_ply.colors).astype(np.float32)
+    
+    # bkgd_ply_mask = np.ones_like(bkgd_ply_xyz[..., :1]).astype(np.bool_)
+    # store_path = os.path.join(lidar_bkgd_dir, f'full.ply')
+    # storePly(store_path, bkgd_ply_xyz, bkgd_ply_rgb, bkgd_ply_mask)
+    
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root_dir', type=str, default='/nas/home/yanyunzhi/waymo/training')
     parser.add_argument('--save_dir', type=str, default='./test_data/')
     parser.add_argument('--skip_existing', action='store_true')
+<<<<<<< HEAD
     parser.add_argument('--use_v1', action='store_true', help='Use Waymo v1 tfrecord format instead of v2 parquet')
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     args = parser.parse_args()
     
     root_dir = args.root_dir
@@ -485,6 +668,7 @@ def main():
             print(f'lidar pcd exists for {sequence_path}, skipping...')
             continue
                 
+<<<<<<< HEAD
         if args.use_v1:
             save_lidar_v1(
                 root_dir=root_dir,
@@ -501,3 +685,14 @@ def main():
 
 if __name__ == '__main__':
     main()
+=======
+        save_lidar(
+            root_dir=root_dir,
+            seq_path=sequence_path,
+            seq_save_dir=sequence_save_dir,
+        )
+
+    
+if __name__ == '__main__':
+    main()
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf

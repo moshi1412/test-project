@@ -120,9 +120,12 @@ class StreetGaussianModel(nn.Module):
         for model_name in self.model_name_id.keys():
             if startswith_any(model_name, exclude_list):
                 continue
+<<<<<<< HEAD
             if model_name not in state_dict:
                 print(f"Warning: {model_name} not found in state_dict, skipping...")
                 continue
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
             model: GaussianModel = getattr(self, model_name)
             model.load_state_dict(state_dict[model_name])
         

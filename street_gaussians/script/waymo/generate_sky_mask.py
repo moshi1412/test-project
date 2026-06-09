@@ -33,7 +33,10 @@ def setup(args):
     # ======================== Load Grounding DINO model ========================
     print(colored('Load Grounding DINO model', 'green'))
     def load_model_hf(repo_id, filename, ckpt_config_filename, device='cpu'):
+<<<<<<< HEAD
         os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
         cache_config_file = hf_hub_download(repo_id=repo_id, filename=ckpt_config_filename)
 
         args = SLConfig.fromfile(cache_config_file) 
@@ -183,10 +186,16 @@ if __name__ == "__main__":
         assert len(args.box_threshold) == 5
         box_threshold = args.box_threshold
     print('box_threshold: ', box_threshold)
+<<<<<<< HEAD
 
     # for scene_idx in os.listdir(args.datadir):
     segment_with_text_prompt(
         datadir=os.path.join(args.datadir,'524'), 
+=======
+        
+    segment_with_text_prompt(
+        datadir=args.datadir, 
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
         BOX_TRESHOLD=box_threshold,
         TEXT_TRESHOLD=args.text_threshold,
         ignore_exists=args.ignore_exists,

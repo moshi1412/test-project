@@ -57,12 +57,21 @@ python script/waymo/waymo_converter.py --root_dir TRAINING_SET_DIR --save_dir SA
 
 Preprocess the experiment scenes
 ```
+<<<<<<< HEAD
 python script/waymo/waymo_converter.py --root_dir /mnt/ljy/waymo/static32 --save_dir /mnt/ljy/street_gaussians/data --split_file script/waymo/waymo_splits/train_static.txt --segment_file script/waymo/waymo_splits/segment_list_train.txt --track_file /mnt/ljy/street_gaussians/asset/result.json
+=======
+python script/waymo/waymo_converter.py --root_dir VALIDATION_SET_DIR --save_dir SAVE_DIR --split_file script/waymo/waymo_splits/val_dynamic.txt --segment_file script/waymo/waymo_splits/segment_list_val.txt
+--track_file TRACKER_PATH
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 ```
 
 Generating LiDAR depth
 ```
+<<<<<<< HEAD
 python script/waymo/generate_lidar_depth.py --datadir /mnt/ljy/street_gaussians/data
+=======
+python script/waymo/generate_lidar_depth.py --datadir DATA_DIR
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 ```
 
 Generating sky mask
@@ -70,7 +79,11 @@ Generating sky mask
 Install GroundingDINO following [this repo](https://github.com/IDEA-Research/GroundingDINO) and download SAM checkpoint from [this link](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth).
 
 ```
+<<<<<<< HEAD
 HF_ENDPOINT=https://hf-mirror.com python script/waymo/generate_sky_mask.py --datadir /mnt/ljy/street_gaussians/data --sam_checkpoint /mnt/ljy/street_gaussians/asset/sam_vit_h_4b8939.pth
+=======
+python script/waymo/generate_sky_mask.py --datadir DATA_DIR --sam_checkpoint SAM_CKPT
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 ```
 
 
@@ -88,7 +101,11 @@ The parameters used are listed in `config.py` as shown [here](https://github.com
 
 ### Training
 ```
+<<<<<<< HEAD
 python train.py --config configs/default.yaml
+=======
+python train.py --config configs/xxxx.yaml
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 ```
 
 Training on example scenes
@@ -98,12 +115,20 @@ bash script/waymo/train_waymo_expample.sh
 
 Training on experiment scenes
 ```
+<<<<<<< HEAD
 bash script/train_waymo_exp.sh
+=======
+bash script/waymo/train_waymo_exp.sh
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 ```
 
 ### Rendering
 ```
+<<<<<<< HEAD
 python render.py --config configs/default.yaml mode evaluate
+=======
+python render.py --config configs/xxxx.yaml mode {evaluate, trajectory}
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 ```
 Rendering on example scenes
 ```

@@ -3,7 +3,10 @@ import numpy as np
 import os
 import pickle
 import cv2
+<<<<<<< HEAD
 import tensorflow as tf
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 from collections import defaultdict
 from typing import Dict, List, Literal, Tuple, Type
 def image_filename_to_cam(x): return int(x.split('.')[0][-1])
@@ -68,6 +71,7 @@ class ParquetReader:
         return self.read(tag)
 
 
+<<<<<<< HEAD
 class TFRecordReader:
     """Reader for Waymo Open Dataset v1 tfrecord files."""
     
@@ -179,6 +183,8 @@ class TFRecordReader:
         return self.read(tag)
 
 
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 def get_object(object_list, name):
     """ Search for an object by name in an object list. """
 
@@ -369,7 +375,10 @@ def project_label_to_mask(dim, obj_pose, calibration, calibration_dict=None):
 
     return mask
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 def draw_3d_box_on_img(vertices, img, color=(255, 128, 128), thickness=1):
     # Draw the edges of the 3D bounding box
     for k in [0, 1]:
@@ -381,7 +390,10 @@ def draw_3d_box_on_img(vertices, img, color=(255, 128, 128), thickness=1):
     for idx1, idx2 in [((1, 0, 0), (1, 1, 1)), ((1, 1, 0), (1, 0, 1))]:
         cv2.line(img, tuple(vertices[idx1]), tuple(vertices[idx2]), color, thickness)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 def get_lane_shift_direction(ego_frame_poses, frame):
     assert frame >= 0 and frame < len(ego_frame_poses)
     if frame == 0:

@@ -245,6 +245,7 @@ def visualize_depth_numpy(depth, minmax=None, cmap=cv2.COLORMAP_JET):
     """    
     x = np.nan_to_num(depth) # change nan to 0
     if minmax is None:
+<<<<<<< HEAD
         positive_depth = x[x>0]
         if len(positive_depth) == 0:
             # 如果没有有效的深度值，返回全黑图像
@@ -252,6 +253,9 @@ def visualize_depth_numpy(depth, minmax=None, cmap=cv2.COLORMAP_JET):
             x_ = cv2.applyColorMap(x, cmap)
             return x_, [0, 1]
         mi = np.min(positive_depth) # get minimum positive depth (ignore background)
+=======
+        mi = np.min(x[x>0]) # get minimum positive depth (ignore background)
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
         ma = np.max(x)
     else:
         mi,ma = minmax

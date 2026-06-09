@@ -23,9 +23,15 @@ def convert_filename(filename):
     new_filename = f'cam_{cam_id}/{frame}.png'
     return new_filename
 
+<<<<<<< HEAD
 def run_colmap_waymo(result,data_dir):    
     model_path = cfg.model_path
     data_path = data_dir
+=======
+def run_colmap_waymo(result):    
+    model_path = cfg.model_path
+    data_path = cfg.source_path
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     colmap_dir = os.path.join(model_path, 'colmap')
     os.makedirs(colmap_dir, exist_ok=True)
     print('running colmap, colmap dir: ', colmap_dir)
@@ -103,7 +109,10 @@ def run_colmap_waymo(result,data_dir):
         new_image_filename = os.path.join(mask_images_dir, convert_filename(basename))
         new_mask_filename = f'{new_image_filename}.png'
         if not os.path.exists(new_mask_filename):
+<<<<<<< HEAD
             # print(f'Copying mask {image_filename} to {new_mask_filename}')
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
             shutil.copyfile(image_filename, new_mask_filename)
             mask = cv2.imread(new_mask_filename)
             flip_mask = (255 - mask).astype(np.uint8)
@@ -233,7 +242,11 @@ def run_colmap_waymo(result,data_dir):
     cam_rigid["ref_camera_id"] = ref_camera_id
     rigid_cam_list = []
 
+<<<<<<< HEAD
     _, extrinsics, _, _ = load_camera_info(data_dir)
+=======
+    _, extrinsics, _, _ = load_camera_info(cfg.source_path)
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     for cam_id in unique_cams:
         rigid_cam = dict()
         rigid_cam["camera_id"] = cam_id

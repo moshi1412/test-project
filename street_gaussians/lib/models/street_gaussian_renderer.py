@@ -143,13 +143,19 @@ class StreetGaussianRenderer():
             
             rendered_acc = torch.zeros(1, int(viewpoint_camera.image_height), int(viewpoint_camera.image_width), device="cuda")
             rendered_semantic = torch.zeros(0, int(viewpoint_camera.image_height), int(viewpoint_camera.image_width), device="cuda")
+<<<<<<< HEAD
             rendered_depth = torch.zeros(1, int(viewpoint_camera.image_height), int(viewpoint_camera.image_width), device="cuda")
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
             
             return {
                 "rgb": rendered_color,
                 "acc": rendered_acc,
                 "semantic": rendered_semantic,
+<<<<<<< HEAD
                 "depth": rendered_depth,
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
             }
 
         # Set up rasterization configuration and make rasterizer

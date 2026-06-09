@@ -111,9 +111,14 @@ if __name__ == "__main__":
     parser.add_argument('--datadir', required=True, type=str)
 
     args = parser.parse_args()
+<<<<<<< HEAD
     for scene_idx in os.listdir(args.datadir):
         scene_dir = os.path.join(args.datadir, scene_idx)
         if os.path.isdir(scene_dir):
             generate_lidar_depth(scene_dir)
             
+=======
+    
+    generate_lidar_depth(args.datadir)
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     

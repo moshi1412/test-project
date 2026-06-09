@@ -3,7 +3,11 @@
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
 # All rights reserved.
 #
+<<<<<<< HEAD
 # This software is free for non-commercial, research and evaluation use
+=======
+# This software is free for non-commercial, research and evaluation use 
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 # under the terms of the LICENSE.md file.
 #
 # For inquiries contact  george.drettakis@inria.fr
@@ -24,9 +28,14 @@ from lib.datasets.dataset import Dataset
 
 
 def evaluate(split='test'):
+<<<<<<< HEAD
     print(split)
     scene_dir = cfg.model_path
     dataset = Dataset(scene_idx='003')
+=======
+    scene_dir = cfg.model_path
+    dataset = Dataset()
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     if split == 'test':
         test_dir = Path(scene_dir) / "test"
         cam_infos = dataset.test_cameras[1]
@@ -38,15 +47,31 @@ def evaluate(split='test'):
     
     full_dict = {}
     per_view_dict = {}
+<<<<<<< HEAD
+=======
+    full_dict_polytopeonly = {}
+    per_view_dict_polytopeonly = {}
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     
     print(f"Scene: {scene_dir }")
     full_dict[scene_dir] = {}
     per_view_dict[scene_dir] = {}
+<<<<<<< HEAD
+=======
+    full_dict_polytopeonly[scene_dir] = {}
+    per_view_dict_polytopeonly[scene_dir] = {}
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     
     for method in os.listdir(test_dir):
         print("Method:", method)
         full_dict[scene_dir][method] = {}
         per_view_dict[scene_dir][method] = {}
+<<<<<<< HEAD
+=======
+        full_dict_polytopeonly[scene_dir][method] = {}
+        per_view_dict_polytopeonly[scene_dir][method] = {}    
+
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 
         renders = []
         gts = []
@@ -66,11 +91,15 @@ def evaluate(split='test'):
         psnrs = []
         ssims = []
         lpipss = []
+<<<<<<< HEAD
         valid_names = []
+=======
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 
         for idx in tqdm(range(len(renders)), desc="Metric evaluation progress"):
             render = renders[idx].cuda()
             gt = gts[idx].cuda()
+<<<<<<< HEAD
             name = image_names[idx]
             
             ssim_val = ssim(render, gt)
@@ -105,6 +134,23 @@ def evaluate(split='test'):
             "PSNR": {name: psnr for psnr, name in zip(torch.tensor(psnrs).tolist(), valid_names)},
             "LPIPS": {name: lp for lp, name in zip(torch.tensor(lpipss).tolist(), valid_names)}
         })
+=======
+            ssims.append(ssim(render, gt))
+            psnrs.append(psnr(render, gt))
+            lpipss.append(lpips(render, gt, net_type='alex'))
+        
+        print("  SSIM : {:>12.7f}".format(torch.tensor(ssims).mean(), ".5"))
+        print("  PSNR : {:>12.7f}".format(torch.tensor(psnrs).mean(), ".5"))
+        print("  LPIPS: {:>12.7f}".format(torch.tensor(lpipss).mean(), ".5"))
+        print("")
+        
+        full_dict[scene_dir][method].update({"SSIM": torch.tensor(ssims).mean().item(),
+                                        "PSNR": torch.tensor(psnrs).mean().item(),
+                                        "LPIPS": torch.tensor(lpipss).mean().item()})
+        per_view_dict[scene_dir][method].update({"SSIM": {name: ssim for ssim, name in zip(torch.tensor(ssims).tolist(), image_names)},
+                                                    "PSNR": {name: psnr for psnr, name in zip(torch.tensor(psnrs).tolist(), image_names)},
+                                                    "LPIPS": {name: lp for lp, name in zip(torch.tensor(lpipss).tolist(), image_names)}})
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 
     with open(scene_dir + f"/results_{split}.json", 'w') as fp:
         json.dump(full_dict[scene_dir], fp, indent=True)
@@ -115,4 +161,8 @@ if __name__ == "__main__":
     if cfg.eval.eval_train:
         evaluate(split='train')
     if cfg.eval.eval_test:
+<<<<<<< HEAD
         evaluate(split='test')
+=======
+        evaluate(split='test')
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf

@@ -180,5 +180,9 @@ def render_pointcloud_diff_point_rasterization(c2w, ixt, points, features, H, W,
     acc = rendered_alpha[None].permute(0, 2, 3, 1)
     dpt = rendered_depth[None].permute(0, 2, 3, 1)
 
+<<<<<<< HEAD
     return torch.cat([rgb, acc, dpt], dim=-1)  # 1, H, W, 5 (rgb, acc, depth)
+=======
+    return torch.cat([rgb, acc], dim=-1)  # 1, H, W, 4
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 

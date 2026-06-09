@@ -7,5 +7,9 @@ diff_rasterization/diff_rast.egg-info
 diff_rasterization/dist
 tensorboard_3d
 screenshots
+<<<<<<< HEAD
 *.pth
 data/
+=======
+*.pth
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf

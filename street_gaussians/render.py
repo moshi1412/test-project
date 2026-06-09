@@ -12,12 +12,20 @@ from lib.visualizers.base_visualizer import BaseVisualizer as Visualizer
 from lib.visualizers.street_gaussian_visualizer import StreetGaussianVisualizer
 import time
 
+<<<<<<< HEAD
 def render_sets(scene_idx):
+=======
+def render_sets():
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     cfg.render.save_image = True
     cfg.render.save_video = False
 
     with torch.no_grad():
+<<<<<<< HEAD
         dataset = Dataset(scene_idx)
+=======
+        dataset = Dataset()
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
         gaussians = StreetGaussianModel(dataset.scene_info.metadata)
         scene = Scene(gaussians=gaussians, dataset=dataset)
         renderer = StreetGaussianRenderer()
@@ -59,12 +67,20 @@ def render_sets(scene_idx):
         print(times)        
         print('average rendering time: ', sum(times[1:]) / len(times[1:]))
                 
+<<<<<<< HEAD
 def render_trajectory(scene_idx):
+=======
+def render_trajectory():
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     cfg.render.save_image = False
     cfg.render.save_video = True
     
     with torch.no_grad():
+<<<<<<< HEAD
         dataset = Dataset(scene_idx)        
+=======
+        dataset = Dataset()        
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
         gaussians = StreetGaussianModel(dataset.scene_info.metadata)
 
         scene = Scene(gaussians=gaussians, dataset=dataset)
@@ -87,6 +103,7 @@ def render_trajectory(scene_idx):
 if __name__ == "__main__":
     print("Rendering " + cfg.model_path)
     safe_state(cfg.eval.quiet)
+<<<<<<< HEAD
     for scene_idx in os.listdir(cfg.source_path):
         if cfg.mode == 'evaluate':
             render_sets(scene_idx)
@@ -94,3 +111,12 @@ if __name__ == "__main__":
             render_trajectory(scene_idx)
         else:
             raise NotImplementedError()
+=======
+    
+    if cfg.mode == 'evaluate':
+        render_sets()
+    elif cfg.mode == 'trajectory':
+        render_trajectory()
+    else:
+        raise NotImplementedError()
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf

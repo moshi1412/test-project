@@ -260,8 +260,13 @@ class FrozenOpenCLIPImageEmbedder(AbstractEmbModel):
     def __init__(
             self,
             arch="ViT-H-14",
+<<<<<<< HEAD
             version="/mnt/ljy/street_crafter/download/CLIP-ViT-H-14-laion2B-s32B-b79K/open_clip_pytorch_model.bin",
             # version="laion2b_s32b_b79k",
+=======
+            # version="path_to/laion/CLIP-ViT-H-14-laion2B-s32B-b79K/open_clip_pytorch_model.bin",
+            version="laion2b_s32b_b79k",
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
             device="cuda",
             max_length=77,
             freeze=True,

@@ -21,15 +21,23 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
+<<<<<<< HEAD
 def training(scene_idx):
     print(f'Processing{scene_idx}')
+=======
+def training():
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     training_args = cfg.train
     optim_args = cfg.optim
     data_args = cfg.data
 
     start_iter = 0
     tb_writer = prepare_output_and_logger()
+<<<<<<< HEAD
     dataset = Dataset(scene_idx)
+=======
+    dataset = Dataset()
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
     gaussians = StreetGaussianModel(dataset.scene_info.metadata)
     scene = Scene(gaussians=gaussians, dataset=dataset)
 
@@ -84,6 +92,7 @@ def training(scene_idx):
         if 'lidar_depth' in viewpoint_cam.guidance:
             lidar_depth = viewpoint_cam.guidance['lidar_depth']
             lidar_depth = lidar_depth.cuda(non_blocking=True) if not lidar_depth.is_cuda else lidar_depth
+<<<<<<< HEAD
         # else:
         #     lidar_depth = None
         if 'sky_mask' in viewpoint_cam.guidance:
@@ -91,6 +100,11 @@ def training(scene_idx):
             sky_mask = sky_mask.cuda(non_blocking=True) if not sky_mask.is_cuda else sky_mask
         # else:
         #     sky_mask = None
+=======
+        if 'sky_mask' in viewpoint_cam.guidance:
+            sky_mask = viewpoint_cam.guidance['sky_mask']
+            sky_mask = sky_mask.cuda(non_blocking=True) if not sky_mask.is_cuda else sky_mask
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
         if 'obj_bound' in viewpoint_cam.guidance:
             obj_bound = viewpoint_cam.guidance['obj_bound']
             obj_bound = obj_bound.cuda(non_blocking=True) if not obj_bound.is_cuda else obj_bound
@@ -314,6 +328,7 @@ def training_report(tb_writer, iteration, scalar_stats, tensor_stats, testing_it
 
 if __name__ == "__main__":
     print("Optimizing " + cfg.model_path)
+<<<<<<< HEAD
     print("source path: " + cfg.source_path)
     for scene_idx in os.listdir(cfg.source_path):
 
@@ -323,6 +338,15 @@ if __name__ == "__main__":
         # Start GUI server, configure and run training
         torch.autograd.set_detect_anomaly(cfg.train.detect_anomaly)
         training(scene_idx)
+=======
+
+    # Initialize system state (RNG)
+    safe_state(cfg.train.quiet)
+
+    # Start GUI server, configure and run training
+    torch.autograd.set_detect_anomaly(cfg.train.detect_anomaly)
+    training()
+>>>>>>> bee74afc1408be807bc9aa7e82c2935b972b6baf
 
     # All done
     print("\nTraining complete.")
