@@ -149,3 +149,5 @@ logs/
 *.pth
 
 *.egg-info
+output/
+waymo/
