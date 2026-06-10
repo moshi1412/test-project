@@ -166,6 +166,8 @@ CudaRasterizer::GeometryState CudaRasterizer::GeometryState::fromChunk(char*& ch
 	cub::DeviceScan::InclusiveSum(nullptr, geom.scan_size, geom.tiles_touched, geom.tiles_touched, P);
 	obtain(chunk, geom.scanning_space, geom.scan_size, 128);
 	obtain(chunk, geom.point_offsets, P, 128);
+	obtain(chunk, geom.depth_vars, P, 128);
+	obtain(chunk, geom.depthvar_gradient, P, 128);
 	return geom;
 }
 
@@ -175,6 +177,12 @@ CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char*& chunk, s
 	obtain(chunk, img.accum_alpha, N, 128);
 	obtain(chunk, img.n_contrib, N, 128);
 	obtain(chunk, img.ranges, N, 128);
+	obtain(chunk, img.median_left_depth, N, 128);
+	obtain(chunk, img.median_right_depth, N, 128);
+	obtain(chunk, img.median_left_T, N, 128);
+	obtain(chunk, img.median_right_T, N, 128);
+	obtain(chunk, img.median_left_gid, N, 128);
+	obtain(chunk, img.median_right_gid, N, 128);
 	return img;
 }
 
@@ -196,29 +204,29 @@ CudaRasterizer::BinningState CudaRasterizer::BinningState::fromChunk(char*& chun
 // Forward rendering procedure for differentiable rasterization
 // of Gaussians.
 int CudaRasterizer::Rasterizer::forward(
-	std::function<char* (size_t)> geometryBuffer,
-	std::function<char* (size_t)> binningBuffer,
-	std::function<char* (size_t)> imageBuffer,
-	const int P, int D, int M,
-	const float* background,
-	const int width, int height,
-	const float* means3D,
-	const float* shs,
-	const float* colors_precomp,
-	const float* opacities,
-	const float* scales,
-	const float scale_modifier,
-	const float* rotations,
-	const float* cov3D_precomp,
-	const float* viewmatrix,
-	const float* projmatrix,
-	const float* cam_pos,
-	const float tan_fovx, float tan_fovy,
-	const bool prefiltered,
-	float* out_color,
-	float* out_depth,
-	int* radii,
-	bool debug)
+    std::function<char* (size_t)> geometryBuffer,
+    std::function<char* (size_t)> binningBuffer,
+    std::function<char* (size_t)> imageBuffer,
+    const int P, int D, int M,
+    const float* background,
+    const int width, int height,
+    const float* means3D,
+    const float* shs,
+    const float* colors_precomp,
+    const float* opacities,
+    const float* scales,
+    const float scale_modifier,
+    const float* rotations,
+    const float* cov3D_precomp,
+    const float* viewmatrix,
+    const float* projmatrix,
+    const float* cam_pos,
+    const float tan_fovx, float tan_fovy,
+    const bool prefiltered,
+    float* out_color,
+    float* out_depth,
+    int* radii,
+    bool debug)
 {
 	const float focal_y = height / (2.0f * tan_fovy);
 	const float focal_x = width / (2.0f * tan_fovx);
@@ -247,31 +255,16 @@ int CudaRasterizer::Rasterizer::forward(
 
 	// Run preprocessing per-Gaussian (transformation, bounding, conversion of SHs to RGB)
 	CHECK_CUDA(FORWARD::preprocess(
-		P, D, M,
-		means3D,
-		(glm::vec3*)scales,
-		scale_modifier,
-		(glm::vec4*)rotations,
-		opacities,
-		shs,
-		geomState.clamped,
-		cov3D_precomp,
-		colors_precomp,
-		viewmatrix, projmatrix,
-		(glm::vec3*)cam_pos,
-		width, height,
-		focal_x, focal_y,
-		tan_fovx, tan_fovy,
-		radii,
-		geomState.means2D,
-		geomState.depths,
-		geomState.cov3D,
-		geomState.rgb,
-		geomState.conic_opacity,
-		tile_grid,
-		geomState.tiles_touched,
-		prefiltered
-	), debug)
+        P, D, M,
+        means3D, (glm::vec3*)scales, scale_modifier, (glm::vec4*)rotations,
+        opacities, shs, geomState.clamped,
+        cov3D_precomp, colors_precomp,
+        viewmatrix, projmatrix, (glm::vec3*)cam_pos,
+        width, height, focal_x, focal_y, tan_fovx, tan_fovy,
+        radii, geomState.means2D, geomState.depths, geomState.depth_vars, // 新参数
+        geomState.cov3D, geomState.rgb, geomState.conic_opacity,
+        tile_grid, geomState.tiles_touched, prefiltered
+    ), debug);
 
 	// Compute prefix sum over full list of touched tile counts by Gaussians
 	// E.g., [2, 3, 0, 2, 1] -> [2, 5, 5, 7, 8]
@@ -321,19 +314,28 @@ int CudaRasterizer::Rasterizer::forward(
 	// Let each tile blend its range of Gaussians independently in parallel
 	const float* feature_ptr = colors_precomp != nullptr ? colors_precomp : geomState.rgb;
 	CHECK_CUDA(FORWARD::render(
-		tile_grid, block,
-		imgState.ranges,
-		binningState.point_list,
-		width, height,
-		geomState.means2D,
-		feature_ptr,
-		geomState.depths,
-		geomState.conic_opacity,
-		imgState.accum_alpha,
-		imgState.n_contrib,
-		background,
-		out_color,
-		out_depth), debug)
+        tile_grid, block,
+        imgState.ranges,
+        binningState.point_list,
+        width, height,
+        geomState.means2D,
+        feature_ptr,
+        geomState.depths,
+        geomState.depth_vars,           // 新参数
+        geomState.conic_opacity,
+        imgState.accum_alpha,
+        imgState.n_contrib,
+        background,
+        out_color,
+        out_depth,
+        imgState.median_left_depth,     // 新参数
+        imgState.median_right_depth,
+        imgState.median_left_T,
+        imgState.median_right_T,
+        imgState.median_left_gid,
+        imgState.median_right_gid
+    ), debug);
+	
 
 	return num_rendered;
 }
@@ -341,41 +343,41 @@ int CudaRasterizer::Rasterizer::forward(
 // Produce necessary gradients for optimization, corresponding
 // to forward render pass
 void CudaRasterizer::Rasterizer::backward(
-	const int P, int D, int M, int R,
-	const float* background,
-	const int width, int height,
-	const float* means3D,
-	const float* shs,
-	const float* colors_precomp,
-	const float* scales,
-	const float scale_modifier,
-	const float* rotations,
-	const float* cov3D_precomp,
-	const float* viewmatrix,
-	const float* projmatrix,
-	const float* campos,
-	const float tan_fovx, float tan_fovy,
-	const int* radii,
-	char* geom_buffer,
-	char* binning_buffer,
-	char* img_buffer,
-	const float* dL_dpix,
-	const float* dL_dpix_depth,
-	float* dL_dmean2D,
-	float* dL_dconic,
-	float* dL_dopacity,
-	float* dL_dcolor,
-	float* dL_ddepth,
-	float* dL_dmean3D,
-	float* dL_dcov3D,
-	float* dL_dsh,
-	float* dL_dscale,
-	float* dL_drot,
-	bool debug)
+    const int P, int D, int M, int R,
+    const float* background,
+    const int width, int height,
+    const float* means3D,
+    const float* shs,
+    const float* colors_precomp,
+    const float* scales,
+    const float scale_modifier,
+    const float* rotations,
+    const float* cov3D_precomp,
+    const float* viewmatrix,
+    const float* projmatrix,
+    const float* campos,
+    const float tan_fovx, float tan_fovy,
+    const int* radii,
+    char* geom_buffer,
+    char* binning_buffer,
+    char* img_buffer,
+    const float* dL_dpix,
+    const float* dL_dpix_depth,
+    float* dL_dmean2D,
+    float* dL_dconic,
+    float* dL_dopacity,
+    float* dL_dcolor,
+    float* dL_ddepth,
+    float* dL_dmean3D,
+    float* dL_dcov3D,
+    float* dL_dsh,
+    float* dL_dscale,
+    float* dL_drot,
+    bool debug)
 {
-	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
-	BinningState binningState = BinningState::fromChunk(binning_buffer, R);
-	ImageState imgState = ImageState::fromChunk(img_buffer, width * height);
+    GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
+    BinningState binningState = BinningState::fromChunk(binning_buffer, R);
+    ImageState imgState = ImageState::fromChunk(img_buffer, width * height);
 
 	if (radii == nullptr)
 	{
@@ -394,25 +396,33 @@ void CudaRasterizer::Rasterizer::backward(
 	const float* color_ptr = (colors_precomp != nullptr) ? colors_precomp : geomState.rgb;
 	const float* depth_ptr = geomState.depths;
 	CHECK_CUDA(BACKWARD::render(
-		tile_grid,
-		block,
-		imgState.ranges,
-		binningState.point_list,
-		width, height,
-		background,
-		geomState.means2D,
-		geomState.conic_opacity,
-		color_ptr,
-		depth_ptr,
-		imgState.accum_alpha,
-		imgState.n_contrib,
-		dL_dpix,
-		dL_dpix_depth,
-		(float3*)dL_dmean2D,
-		(float4*)dL_dconic,
-		dL_dopacity,
+        tile_grid, block,
+        imgState.ranges,
+        binningState.point_list,
+        width, height,
+        background,
+        geomState.means2D,
+        geomState.conic_opacity,
+        color_ptr,
+        geomState.depths,
+        geomState.depth_vars,          // 新增
+        imgState.accum_alpha,
+        imgState.n_contrib,
+        dL_dpix,
+        dL_dpix_depth,
+        imgState.median_left_depth,    // 新增
+        imgState.median_right_depth,
+        imgState.median_left_T,
+        imgState.median_right_T,
+        imgState.median_left_gid,
+        imgState.median_right_gid,
+        (float3*)dL_dmean2D,
+        (float4*)dL_dconic,
+         dL_dopacity,
 		dL_dcolor,
-		dL_ddepth), debug)
+		dL_ddepth,
+		geomState.depthvar_gradient), debug);  
+		
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance
 	// given to us or a scales/rot pair? If precomputed, pass that. If not,
@@ -440,5 +450,6 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_dcov3D,
 		dL_dsh,
 		(glm::vec3*)dL_dscale,
-		(glm::vec4*)dL_drot), debug)
+		(glm::vec4*)dL_drot,
+		geomState.depthvar_gradient), debug);   // 新增参数
 }

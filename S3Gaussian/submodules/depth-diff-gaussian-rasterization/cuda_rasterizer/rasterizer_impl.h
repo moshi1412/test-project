@@ -39,15 +39,23 @@ namespace CudaRasterizer
 		float* rgb;
 		uint32_t* point_offsets;
 		uint32_t* tiles_touched;
+		float* depth_vars;
+		float* depthvar_gradient;   // 存储 dL_ddepthvar
 
 		static GeometryState fromChunk(char*& chunk, size_t P);
 	};
 
-	struct ImageState
-	{
+	struct ImageState {
 		uint2* ranges;
 		uint32_t* n_contrib;
 		float* accum_alpha;
+		// New fields for median interval info
+		float* median_left_depth;
+		float* median_right_depth;
+		float* median_left_T;
+		float* median_right_T;
+		uint32_t* median_left_gid;
+		uint32_t* median_right_gid;
 
 		static ImageState fromChunk(char*& chunk, size_t N);
 	};

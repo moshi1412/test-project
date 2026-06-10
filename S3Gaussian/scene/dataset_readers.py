@@ -827,12 +827,20 @@ def readWaymoInfo(path, white_background, eval, extension=".png", use_bg_gs=Fals
         accumulated_num_original_rays = 0
         accumulated_num_rays = 0
         for t in trange(0, len(lidar_filepaths), desc="loading lidar", dynamic_ncols=True):
-            lidar_info = np.memmap(
-                lidar_filepaths[t],
-                dtype=np.float32,
-                mode="r",
-            ).reshape(-1, 10) 
-            #).reshape(-1, 14)
+            try:
+                lidar_info = np.memmap(
+                    lidar_filepaths[t],
+                    dtype=np.float32,
+                    mode="r",
+                ).reshape(-1, 10) 
+            #再次尝试
+            except:
+                lidar_info = np.memmap(
+                    lidar_filepaths[t],
+                    dtype=np.float32,
+                    mode="r",
+                ).reshape(-1, 14) 
+                
             original_length = len(lidar_info)
             accumulated_num_original_rays += original_length
             lidar_origins = lidar_info[:, :3]

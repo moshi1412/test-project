@@ -745,7 +745,7 @@ if __name__ == "__main__":
     parser.add_argument("--prior_checkpoint", type=str, default = None)
     parser.add_argument("--merge", action="store_true", help="merge gaussians")
     parser.add_argument("--prior_checkpoint2", type=str, default = None)
-    
+    # parser.add_argument("--use_fags", action="store_true")
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     if args.configs:

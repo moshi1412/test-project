@@ -232,6 +232,7 @@ class ModelHiddenParams(ParamGroup):
         self.static_mlp=False
         self.apply_rotation=False
 
+        self.use_fags = False
         
         super().__init__(parser, "ModelHiddenParams")
 

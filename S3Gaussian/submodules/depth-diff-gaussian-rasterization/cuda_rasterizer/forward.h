@@ -18,11 +18,34 @@
 #define GLM_FORCE_CUDA
 #include <glm/glm.hpp>
 
-namespace FORWARD
-{
-	// Perform initial steps for each Gaussian prior to rasterization.
-	void preprocess(int P, int D, int M,
-		const float* orig_points,
+namespace FORWARD {
+    void render(
+        const dim3 grid, dim3 block,
+        const uint2* ranges,
+        const uint32_t* point_list,
+        int W, int H,
+        const float2* points_xy_image,
+        const float* features,
+        const float* depths,
+        const float* depth_vars,          // added
+        const float4* conic_opacity,
+        float* final_T,
+        uint32_t* n_contrib,
+        const float* bg_color,
+        float* out_color,
+        float* out_depth,
+        float* out_median_left_depth,     // added
+        float* out_median_right_depth,    // added
+        float* out_median_left_T,         // added
+        float* out_median_right_T,        // added
+        uint32_t* out_median_left_gid,    // added
+        uint32_t* out_median_right_gid);  // added
+
+
+	
+	void preprocess(
+		int P, int D, int M,
+		const float* means3D,
 		const glm::vec3* scales,
 		const float scale_modifier,
 		const glm::vec4* rotations,
@@ -38,31 +61,15 @@ namespace FORWARD
 		const float focal_x, float focal_y,
 		const float tan_fovx, float tan_fovy,
 		int* radii,
-		float2* points_xy_image,
+		float2* means2D,
 		float* depths,
+		float* depth_vars,
 		float* cov3Ds,
-		float* colors,
+		float* rgb,
 		float4* conic_opacity,
 		const dim3 grid,
 		uint32_t* tiles_touched,
 		bool prefiltered);
-
-	// Main rasterization method.
-	void render(
-		const dim3 grid, dim3 block,
-		const uint2* ranges,
-		const uint32_t* point_list,
-		int W, int H,
-		const float2* points_xy_image,
-		const float* features,
-		const float* depth,
-		const float4* conic_opacity,
-		float* final_T,
-		uint32_t* n_contrib,
-		const float* bg_color,
-		float* out_color,
-		float* out_depth);
 }
-
 
 #endif

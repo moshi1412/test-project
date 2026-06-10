@@ -89,6 +89,13 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         means3D_final, scales_final, rotations_final, opacity_final, shs_final, dx, feat, dshs = pc._deformation(means3D, scales, 
                                                                  rotations, opacity, shs,
                                                                  time)
+        if pc.use_fags:
+            if pc.fags_kernel is None:
+                pc.init_fags_kernel()
+            dx, dr, ds = pc.fags_deform(means3D_final, time)
+            means3D_final = means3D_final + dx
+            rotations_final = rotations_final + dr
+            scales_final = scales_final + ds
     else:
         raise NotImplementedError
 

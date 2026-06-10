@@ -27,6 +27,7 @@ from utils.general_utils import strip_symmetric, build_scaling_rotation
 # from utils.point_utils import addpoint, combine_pointcloud, downsample_point_cloud_open3d, find_indices_in_A
 from scene.deformation import deform_network
 from scene.regulation import compute_plane_smoothness
+from scene.FAGS import *
 class GaussianModel:
 
     def setup_functions(self):
@@ -67,6 +68,16 @@ class GaussianModel:
         self.spatial_lr_scale = 0
         self._deformation_table = torch.empty(0)
         self.setup_functions()
+        self.use_fags = args.use_fags
+        self.fags_deform=None
+        self.fags_kernel=None
+        if self.use_fags:
+            self.fags_deform = FourierHighFreqDeform()
+            # self.fags_kernel = FDGK()
+
+    def init_fags_kernel(self):
+        N = self._xyz.shape[0]
+        self.fags_kernel = FDGK(N)
 
     def capture(self):
         return (
@@ -185,6 +196,8 @@ class GaussianModel:
             {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"}
             
         ]
+        if self.use_fags:
+            l.append({'params': self.fags_kernel.parameters(), 'lr': 2e-3})
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
