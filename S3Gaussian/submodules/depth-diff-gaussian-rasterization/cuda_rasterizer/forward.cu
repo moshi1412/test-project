@@ -413,12 +413,7 @@ renderCUDA(
     }
 
     // Compute color and median depth using exact Gaussian transmittance
-    float T = 1.0f;   // transmittance from start to current depth interval start
-    float final_color[CHANNELS] = {0};
-    float median_depth = -1.0f;
-    int median_left_idx = -1, median_right_idx = -1;
-    float median_left_T = -1.0f, median_right_T = -1.0f;
-    float median_left_depth = -1.0f, median_right_depth = -1.0f;
+    // (moved below — initialized before bisection)
 
     // We need to compute transmittance at each Gaussian's depth (where it starts being active?).
     // However, the continuous integral over the Gaussian's density means that the transmittance
@@ -475,7 +470,7 @@ renderCUDA(
 
     // 1. 预先计算每个高斯均值深度处（以及深度0处）的连续透射率
 	// 注意：compute_T 是之前定义好的 lambda，依赖 infos 数组
-	float* boundary_T = new float[local_cnt + 1];  // 使用栈数组或局部数组，因为 local_cnt ≤ MAX_CONTRIB_PER_PIXEL
+	float boundary_T[MAX_CONTRIB_PER_PIXEL + 1];
 	boundary_T[0] = compute_T(0.0f);
 	for (int i = 0; i < local_cnt; i++) {
 		boundary_T[i+1] = compute_T(local_depths[i]);

@@ -449,7 +449,7 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_ddepth,
 		dL_dcov3D,
 		dL_dsh,
+		geomState.depthvar_gradient,
 		(glm::vec3*)dL_dscale,
-		(glm::vec4*)dL_drot,
-		geomState.depthvar_gradient), debug);   // 新增参数
+		(glm::vec4*)dL_drot), debug);   // 新增参数
 }

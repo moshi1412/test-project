@@ -14,7 +14,7 @@
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
 namespace cg = cooperative_groups;
-
+#define MAX_CONTRIB_PER_PIXEL 128
 __global__ void depthvarToCov3DGradient(
     int P,
     const float* dL_ddepthvar,   // 每个高斯的方差梯度
@@ -63,13 +63,13 @@ __global__ void depthvarToCov3DGradient(
     atomicAdd(&dL_dcov3D[6*idx + 5], grad * d_cov_zz);
 }
 // Helper: CDF of Gaussian (same as in forward)
-__device__ float gaussian_cdf(float t, float mean, float var) {
+__device__ static inline float gaussian_cdf(float t, float mean, float var) {
     float sigma = sqrtf(var);
     return 0.5f * (1.0f + erff((t - mean) / (sigma * 1.41421356237f)));
 }
 
 // Helper: PDF of Gaussian
-__device__ float gaussian_pdf(float t, float mean, float var) {
+__device__ static inline float gaussian_pdf(float t, float mean, float var) {
     float sigma = sqrtf(var);
     float z = (t - mean) / sigma;
     return expf(-0.5f * z * z) / (sigma * 2.50662827463f);
@@ -526,8 +526,8 @@ renderCUDA(
     float4* __restrict__ dL_dconic2D,
     float* __restrict__ dL_dopacity,
     float* __restrict__ dL_dcolors,
-    float* __restrict__ dL_ddepths，
-	float* dL_ddepthvar)   // 新增)
+    float* __restrict__ dL_ddepths,
+	float* dL_ddepthvar)
 {
     auto block = cg::this_thread_block();
     const uint32_t horizontal_blocks = (W + BLOCK_X - 1) / BLOCK_X;
@@ -543,6 +543,13 @@ renderCUDA(
     const uint2 range = ranges[block.group_index().y * horizontal_blocks + block.group_index().x];
     const int rounds = (range.y - range.x + BLOCK_SIZE - 1) / BLOCK_SIZE;
     int toDo = range.y - range.x;
+
+    // 局部数组：收集所有对当前像素有贡献的高斯（用于深度梯度计算）
+    float local_depths[MAX_CONTRIB_PER_PIXEL];
+    float local_vars[MAX_CONTRIB_PER_PIXEL];
+    float local_alphas[MAX_CONTRIB_PER_PIXEL];
+    int local_gids[MAX_CONTRIB_PER_PIXEL];
+    int local_cnt = 0;
 
     // 共享内存
     __shared__ int collected_id[BLOCK_SIZE];
@@ -570,6 +577,43 @@ renderCUDA(
     float last_depth = 0;
     const float ddelx_dx = 0.5f * W;
     const float ddely_dy = 0.5f * H;
+
+    // 收集 pass：遍历 tile 中所有高斯，收集到局部数组（用于深度梯度计算）
+    if (dL_dpixel_depth != 0.0f) {
+        int remaining = range.y - range.x;
+        int collect_rounds = (remaining + BLOCK_SIZE - 1) / BLOCK_SIZE;
+        for (int r = 0; r < collect_rounds; r++) {
+            block.sync();
+            int toDo_this = min(BLOCK_SIZE, remaining - r * BLOCK_SIZE);
+            if (toDo_this <= 0) break;
+            int progress = r * BLOCK_SIZE + block.thread_rank();
+            if (range.x + progress < range.y) {
+                int coll_id = point_list[range.x + progress];
+                collected_id[block.thread_rank()] = coll_id;
+                collected_xy[block.thread_rank()] = points_xy_image[coll_id];
+                collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
+                collected_depths[block.thread_rank()] = depths[coll_id];
+                collected_depth_vars[block.thread_rank()] = depth_vars[coll_id];
+            }
+            block.sync();
+            for (int j = 0; j < toDo_this; j++) {
+                float2 xy = collected_xy[j];
+                float2 d = { xy.x - pixf.x, xy.y - pixf.y };
+                float4 con_o = collected_conic_opacity[j];
+                float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y;
+                if (power > 0.0f) continue;
+                float alpha = min(0.99f, con_o.w * expf(power));
+                if (alpha < 1.0f / 255.0f) continue;
+                if (local_cnt < MAX_CONTRIB_PER_PIXEL) {
+                    local_gids[local_cnt] = collected_id[j];
+                    local_depths[local_cnt] = collected_depths[j];
+                    local_vars[local_cnt] = collected_depth_vars[j];
+                    local_alphas[local_cnt] = alpha;
+                    local_cnt++;
+                }
+            }
+        }
+    }
 
     // 第一遍：颜色梯度（与原版相同）
     for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE) {
@@ -661,9 +705,7 @@ renderCUDA(
 		float dT_total_dd = -T_total * sum_alpha_pdf;
 		float factor = dL_dpixel_depth / dT_total_dd;   // 公因子 ∂d/∂L 的分母部分
 
-		// 然后对左右两个高斯计算梯度（也可以对所有高斯计算，但左右是主要的）
-		uint32_t left_gid = median_left_gid[pix_id];
-		uint32_t right_gid = median_right_gid[pix_id];
+    // 然后对左右两个高斯计算梯度（也可以对所有高斯计算，但左右是主要的）
 
 		auto apply_gradient = [&](uint32_t gid, float mean, float var, float alpha) {
 			float cdf_d = gaussian_cdf(d_med, mean, var);
@@ -764,6 +806,7 @@ void BACKWARD::preprocess(
 	float* dL_ddepth,
 	float* dL_dcov3D,
 	float* dL_dsh,
+	const float* dL_ddepthvar,
 	glm::vec3* dL_dscale,
 	glm::vec4* dL_drot)
 {

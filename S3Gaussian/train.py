@@ -376,10 +376,12 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
             depth_preds.append(depth_pred.unsqueeze(0))
             images.append(image.unsqueeze(0))
             gt_image = viewpoint_cam.original_image.cuda()
-            gt_depth = viewpoint_cam.depth_map.cuda()
+            gt_depth = viewpoint_cam.depth_map if viewpoint_cam.depth_map is not None else None
 
             gt_images.append(gt_image.unsqueeze(0))
-            gt_depths.append(gt_depth.unsqueeze(0))
+            # 只在 depth_map 存在时添加
+            if gt_depth is not None:
+                gt_depths.append(gt_depth.unsqueeze(0))
             radii_list.append(radii.unsqueeze(0))
             visibility_filter_list.append(visibility_filter.unsqueeze(0))
             viewspace_point_tensor_list.append(viewspace_point_tensor)
@@ -389,7 +391,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
         image_tensor = torch.cat(images,0)
         depth_pred_tensor = torch.cat(depth_preds,0)
         gt_image_tensor = torch.cat(gt_images,0)
-        gt_depth_tensor = torch.cat(gt_depths,0).float()
+        gt_depth_tensor = torch.cat(gt_depths,0).float() if gt_depths else None
         # Loss
         # breakpoint()
         Ll1 = l1_loss(image_tensor, gt_image_tensor[:,:3,:,:])
@@ -408,7 +410,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
             dshs_abs = torch.abs(render_pkg['dshs'])
             dshs_loss = torch.mean(dshs_abs) * opt.lambda_dshs
             loss += dshs_loss
-        if opt.lambda_depth != 0:
+        if opt.lambda_depth != 0 and gt_depth_tensor is not None:
             depth_loss = compute_depth("l2", depth_pred_tensor, gt_depth_tensor) * opt.lambda_depth
             loss += depth_loss
         if stage == "fine" and hyper.time_smoothness_weight != 0:

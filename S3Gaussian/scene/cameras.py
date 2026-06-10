@@ -64,7 +64,14 @@ class Camera(nn.Module):
         self.camera_center = self.world_view_transform.inverse()[3, :3]
         # for waymo
         self.sky_mask = sky_mask
-        self.depth_map = depth_map
+        # 处理 depth_map：转换为 tensor 并移动到设备
+        if depth_map is not None:
+            if isinstance(depth_map, np.ndarray):
+                self.depth_map = torch.from_numpy(depth_map).float().to(self.data_device)
+            else:
+                self.depth_map = depth_map.float().to(self.data_device)
+        else:
+            self.depth_map = None
         self.semantic_mask = semantic_mask
         self.instance_mask = instance_mask
         self.num_panoptic_objects = num_panoptic_objects

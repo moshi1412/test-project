@@ -29,7 +29,42 @@ def compute_depth(
 ):
     pred_depth = pred_depth.squeeze()
     gt_depth = gt_depth.squeeze()
-    valid_mask = (gt_depth > 0.01) & (gt_depth < max_depth)
+    
+    # 检查是否有有效数据
+    if pred_depth.numel() == 0 or gt_depth.numel() == 0:
+        print('无有效数据')
+        return torch.tensor(0.0, device=pred_depth.device if pred_depth.numel() > 0 else 'cuda')
+    
+    # 形状匹配处理
+    if pred_depth.shape != gt_depth.shape:
+        # 确保 batch 维度一致
+        if len(pred_depth.shape) == 3 and len(gt_depth.shape) == 3:
+            # 都是 batch 模式，取相同 batch size
+            min_batch = min(pred_depth.shape[0], gt_depth.shape[0])
+            pred_depth = pred_depth[:min_batch]
+            gt_depth = gt_depth[:min_batch]
+        # 调整空间维度
+        if pred_depth.shape[-2:] != gt_depth.shape[-2:]:
+            pred_depth = F.interpolate(
+                pred_depth.reshape(-1, 1, pred_depth.shape[-2], pred_depth.shape[-1]),
+                size=gt_depth.shape[-2:],
+                mode='bilinear',
+                align_corners=False
+            ).squeeze(1)
+    
+    # 创建有效掩码：
+    # 1. gt_depth 在有效范围内
+    # 2. pred_depth 不是无穷大（排除未渲染的像素）
+    gt_valid = (gt_depth > 0.01) & (gt_depth < max_depth)
+    pred_valid = pred_depth < max_depth * 10  # 允许一定的误差范围
+    
+    # 只有两者都有效的像素才参与损失计算
+    valid_mask = gt_valid & pred_valid
+    
+    # 检查是否有有效像素
+    if valid_mask.sum() == 0:
+        return torch.tensor(0.0, device=pred_depth.device)
+    
     pred_depth = normalize_depth(pred_depth[valid_mask], max_depth=max_depth)
     gt_depth = normalize_depth(gt_depth[valid_mask], max_depth=max_depth)
     if loss_type == "smooth_l1":
