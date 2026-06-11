@@ -39,7 +39,8 @@ namespace FORWARD {
         float* out_median_left_T,         // added
         float* out_median_right_T,        // added
         uint32_t* out_median_left_gid,    // added
-        uint32_t* out_median_right_gid);  // added
+        uint32_t* out_median_right_gid,   // added
+        int P);  // Total number of Gaussians
 
 
 	

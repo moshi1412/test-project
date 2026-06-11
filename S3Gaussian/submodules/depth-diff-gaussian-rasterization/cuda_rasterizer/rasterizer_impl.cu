@@ -57,7 +57,7 @@ __global__ void checkFrustum(int P,
 	const float* projmatrix,
 	bool* present)
 {
-	auto idx = cg::this_grid().thread_rank();
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx >= P)
 		return;
 
@@ -77,7 +77,7 @@ __global__ void duplicateWithKeys(
 	int* radii,
 	dim3 grid)
 {
-	auto idx = cg::this_grid().thread_rank();
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx >= P)
 		return;
 
@@ -115,7 +115,7 @@ __global__ void duplicateWithKeys(
 // Run once per instanced (duplicated) Gaussian ID.
 __global__ void identifyTileRanges(int L, uint64_t* point_list_keys, uint2* ranges)
 {
-	auto idx = cg::this_grid().thread_rank();
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx >= L)
 		return;
 
@@ -186,17 +186,17 @@ CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char*& chunk, s
 	return img;
 }
 
-CudaRasterizer::BinningState CudaRasterizer::BinningState::fromChunk(char*& chunk, size_t P)
+CudaRasterizer::BinningState CudaRasterizer::BinningState::fromChunk(char*& chunk, size_t num_rendered)
 {
 	BinningState binning;
-	obtain(chunk, binning.point_list, P, 128);
-	obtain(chunk, binning.point_list_unsorted, P, 128);
-	obtain(chunk, binning.point_list_keys, P, 128);
-	obtain(chunk, binning.point_list_keys_unsorted, P, 128);
+	obtain(chunk, binning.point_list, num_rendered, 128);
+	obtain(chunk, binning.point_list_unsorted, num_rendered, 128);
+	obtain(chunk, binning.point_list_keys, num_rendered, 128);
+	obtain(chunk, binning.point_list_keys_unsorted, num_rendered, 128);
 	cub::DeviceRadixSort::SortPairs(
 		nullptr, binning.sorting_size,
 		binning.point_list_keys_unsorted, binning.point_list_keys,
-		binning.point_list_unsorted, binning.point_list, P);
+		binning.point_list_unsorted, binning.point_list, num_rendered);
 	obtain(chunk, binning.list_sorting_space, binning.sorting_size, 128);
 	return binning;
 }
@@ -333,9 +333,12 @@ int CudaRasterizer::Rasterizer::forward(
         imgState.median_left_T,
         imgState.median_right_T,
         imgState.median_left_gid,
-        imgState.median_right_gid
+        imgState.median_right_gid,
+        P  // Total number of Gaussians
     ), debug);
 	
+	// Ensure all GPU operations are completed before returning
+	cudaDeviceSynchronize();
 
 	return num_rendered;
 }

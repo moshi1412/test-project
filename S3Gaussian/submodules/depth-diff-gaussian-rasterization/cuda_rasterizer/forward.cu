@@ -12,8 +12,8 @@
 #include <cmath>      // for erf, erff
 namespace cg = cooperative_groups;
 
-#define MAX_CONTRIB_PER_PIXEL 128
-#define BISECTION_ITER 30      // 30 iterations for high precision
+#define MAX_CONTRIB_PER_PIXEL 32
+#define BISECTION_ITER 10      // Reduced from 30 for better performance
 
 // Helper: compute cumulative distribution function of a Gaussian
 // Returns P(x <= t) for N(mean, var)  (i.e., 0.5*(1+erf((t-mean)/sqrt(2*var))))
@@ -200,7 +200,9 @@ __global__ void preprocessCUDA(int P, int D, int M,
     uint32_t* tiles_touched,
     bool prefiltered)
 {
-    auto idx = cg::this_grid().thread_rank();
+    // 使用普通的线程索引计算，而不是 cooperative groups
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
     if (idx >= P) return;
 
     radii[idx] = 0;
@@ -264,6 +266,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
     //   cov_cam = R * cov_world * R^T
     // Then depth variance = cov_cam[2][2].
     // To avoid full matrix multiplication per Gaussian, we compute:
+    
     glm::mat3 cov_world = glm::mat3(
         cov3D[0], cov3D[1], cov3D[2],
         cov3D[1], cov3D[3], cov3D[4],
@@ -276,8 +279,15 @@ __global__ void preprocessCUDA(int P, int D, int M,
     );
     glm::mat3 cov_cam = R * cov_world * glm::transpose(R);
     float depth_var = cov_cam[2][2];
+    
+    // Ensure valid depth variance
+    if (isnan(depth_var) || isinf(depth_var)) {
+        depth_var = 1e-6f;
+    }
+    
     // Ensure positive variance
     depth_var = fmaxf(depth_var, 1e-6f);
+    
     depth_vars[idx] = depth_var;
 
     radii[idx] = my_radius;
@@ -290,6 +300,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 template <uint32_t CHANNELS>
 __global__ void __launch_bounds__(BLOCK_X * BLOCK_Y)
 renderCUDA(
+    int P,  // Total number of Gaussians, added for bounds checking
     const uint2* __restrict__ ranges,
     const uint32_t* __restrict__ point_list,
     int W, int H,
@@ -311,16 +322,16 @@ renderCUDA(
     uint32_t* __restrict__ out_median_left_gid,
     uint32_t* __restrict__ out_median_right_gid)
 {
-    auto block = cg::this_thread_block();
+    // 使用普通的线程索引计算，而不是 cooperative groups
     uint32_t horizontal_blocks = (W + BLOCK_X - 1) / BLOCK_X;
-    uint2 pix_min = { block.group_index().x * BLOCK_X, block.group_index().y * BLOCK_Y };
+    uint2 pix_min = { blockIdx.x * BLOCK_X, blockIdx.y * BLOCK_Y };
     uint2 pix_max = { min(pix_min.x + BLOCK_X, W), min(pix_min.y + BLOCK_Y, H) };
-    uint2 pix = { pix_min.x + block.thread_index().x, pix_min.y + block.thread_index().y };
+    uint2 pix = { pix_min.x + threadIdx.x, pix_min.y + threadIdx.y };
     uint32_t pix_id = W * pix.y + pix.x;
     float2 pixf = { (float)pix.x, (float)pix.y };
     bool inside = (pix.x < W && pix.y < H);
 
-    uint2 range = ranges[block.group_index().y * horizontal_blocks + block.group_index().x];
+    uint2 range = ranges[blockIdx.y * horizontal_blocks + blockIdx.x];
     const int rounds = (range.y - range.x + BLOCK_SIZE - 1) / BLOCK_SIZE;
     int toDo = range.y - range.x;
 
@@ -338,43 +349,45 @@ renderCUDA(
     int local_gids[MAX_CONTRIB_PER_PIXEL];
     int local_cnt = 0;
 
-    // First pass: collect all contributing Gaussians
     for (int i = 0; i < rounds; i++) {
         int toDo_this_round = min(BLOCK_SIZE, toDo - i * BLOCK_SIZE);
-        if (toDo_this_round <= 0) break;
-
-        int progress = i * BLOCK_SIZE + block.thread_rank();
-        if (range.x + progress < range.y) {
+        
+        int progress = i * BLOCK_SIZE + (threadIdx.y * BLOCK_X + threadIdx.x);
+        if (toDo_this_round > 0 && range.x + progress < range.y) {
             int coll_id = point_list[range.x + progress];
-            collected_id[block.thread_rank()] = coll_id;
-            collected_xy[block.thread_rank()] = points_xy_image[coll_id];
-            collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
-            collected_depth[block.thread_rank()] = depths[coll_id];
-            collected_depth_var[block.thread_rank()] = depth_vars[coll_id];
+            
+            collected_id[threadIdx.y * BLOCK_X + threadIdx.x] = coll_id;
+            collected_xy[threadIdx.y * BLOCK_X + threadIdx.x] = points_xy_image[coll_id];
+            collected_conic_opacity[threadIdx.y * BLOCK_X + threadIdx.x] = conic_opacity[coll_id];
+            collected_depth[threadIdx.y * BLOCK_X + threadIdx.x] = depths[coll_id];
+            collected_depth_var[threadIdx.y * BLOCK_X + threadIdx.x] = depth_vars[coll_id];
         }
-        block.sync();
+        __syncthreads();
 
-        for (int j = 0; j < toDo_this_round; j++) {
-            float2 xy = collected_xy[j];
-            float2 d = { xy.x - pixf.x, xy.y - pixf.y };
-            float4 con_o = collected_conic_opacity[j];
-            float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y;
-            if (power > 0.0f) continue;
-            float alpha = min(0.99f, con_o.w * expf(power));
-            if (alpha < 1.0f/255.0f) continue;
+        if (toDo_this_round > 0) {
+            for (int j = 0; j < toDo_this_round; j++) {
+                float2 xy = collected_xy[j];
+                float2 d = { xy.x - pixf.x, xy.y - pixf.y };
+                float4 con_o = collected_conic_opacity[j];
+                float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y;
+                if (power > 0.0f) continue;
+                float alpha = min(0.99f, con_o.w * expf(power));
+                if (alpha < 1.0f/255.0f) continue;
 
-            if (local_cnt < MAX_CONTRIB_PER_PIXEL) {
-                int gid = collected_id[j];
-                local_gids[local_cnt] = gid;
-                local_depths[local_cnt] = collected_depth[j];
-                local_vars[local_cnt] = collected_depth_var[j];
-                local_alphas[local_cnt] = alpha;
-                for (int ch = 0; ch < CHANNELS; ch++)
-                    local_colors[CHANNELS * local_cnt + ch] = features[gid * CHANNELS + ch];
-                local_cnt++;
+                if (local_cnt < MAX_CONTRIB_PER_PIXEL) {
+                    int gid = collected_id[j];
+                    
+                    local_gids[local_cnt] = gid;
+                    local_depths[local_cnt] = collected_depth[j];
+                    local_vars[local_cnt] = collected_depth_var[j];
+                    local_alphas[local_cnt] = alpha;
+                    for (int ch = 0; ch < CHANNELS; ch++)
+                        local_colors[CHANNELS * local_cnt + ch] = features[gid * CHANNELS + ch];
+                    local_cnt++;
+                }
             }
         }
-        block.sync();
+        __syncthreads();
     }
 
     if (!inside || local_cnt == 0) {
@@ -498,40 +511,44 @@ renderCUDA(
 	}
 
 	// 4. 中位数深度求解
-	float median_depth;
-	float median_left_depth, median_right_depth, median_left_T, median_right_T;
-	int median_left_idx, median_right_idx;
+	float median_depth = 1e10f;  // 默认无穷远
+	float median_left_depth = 1e10f, median_right_depth = 1e10f;
+	float median_left_T = 1.0f, median_right_T = 1.0f;
+	int median_left_idx = -1, median_right_idx = -1;
 
-	if (median_interval >= 0) {
-		float t_low  = (median_interval == 0) ? 0.0f : local_depths[median_interval-1];
-		float t_high = local_depths[median_interval];
-		float T_low  = boundary_T[median_interval];
-		float T_high = boundary_T[median_interval+1];
-		// 二分法求精确深度
-		for (int iter = 0; iter < BISECTION_ITER; iter++) {
-			float t_mid = 0.5f * (t_low + t_high);
-			float T_mid = compute_T(t_mid);
-			if (T_mid > 0.5f) {
-				t_low = t_mid;
-				T_low = T_mid;
-			} else {
-				t_high = t_mid;
-				T_high = T_mid;
+	// 只有在有高斯覆盖时才计算中位数深度
+	if (local_cnt > 0) {
+		if (median_interval >= 0) {
+			float t_low  = (median_interval == 0) ? 0.0f : local_depths[median_interval-1];
+			float t_high = local_depths[median_interval];
+			float T_low  = boundary_T[median_interval];
+			float T_high = boundary_T[median_interval+1];
+			// 二分法求精确深度
+			for (int iter = 0; iter < BISECTION_ITER; iter++) {
+				float t_mid = 0.5f * (t_low + t_high);
+				float T_mid = compute_T(t_mid);
+				if (T_mid > 0.5f) {
+					t_low = t_mid;
+					T_low = T_mid;
+				} else {
+					t_high = t_mid;
+					T_high = T_mid;
+				}
 			}
+			median_depth = 0.5f * (t_low + t_high);
+			median_left_depth = t_low;
+			median_right_depth = t_high;
+			median_left_T = T_low;
+			median_right_T = T_high;
+			median_left_idx = (median_interval == 0) ? -1 : local_gids[median_interval-1];
+			median_right_idx = local_gids[median_interval];
+		} else {
+			// 未跨过 0.5，取最远高斯深度（或 far plane）
+			median_depth = local_depths[local_cnt-1];
+			median_left_depth = median_right_depth = median_depth;
+			median_left_T = median_right_T = boundary_T[local_cnt];
+			median_left_idx = median_right_idx = local_gids[local_cnt-1];
 		}
-		median_depth = 0.5f * (t_low + t_high);
-		median_left_depth = t_low;
-		median_right_depth = t_high;
-		median_left_T = T_low;
-		median_right_T = T_high;
-		median_left_idx = (median_interval == 0) ? -1 : local_gids[median_interval-1];
-		median_right_idx = local_gids[median_interval];
-	} else {
-		// 未跨过 0.5，取最远高斯深度（或 far plane）
-		median_depth = local_depths[local_cnt-1];
-		median_left_depth = median_right_depth = median_depth;
-		median_left_T = median_right_T = boundary_T[local_cnt];
-		median_left_idx = median_right_idx = local_gids[local_cnt-1];
 	}
 
 	// 输出部分不变...
@@ -548,6 +565,7 @@ renderCUDA(
     if (out_median_right_T) out_median_right_T[pix_id] = median_right_T;
     if (out_median_left_gid) out_median_left_gid[pix_id] = median_left_idx;
     if (out_median_right_gid) out_median_right_gid[pix_id] = median_right_idx;
+
 }
 
 // Wrapper for render (adds new parameters)
@@ -571,10 +589,11 @@ void FORWARD::render(
     float* out_median_left_T,
     float* out_median_right_T,
     uint32_t* out_median_left_gid,
-    uint32_t* out_median_right_gid)
+    uint32_t* out_median_right_gid,
+    int P)  // Total number of Gaussians
 {
     renderCUDA<NUM_CHANNELS> <<<grid, block>>>(
-        ranges, point_list, W, H,
+        P, ranges, point_list, W, H,
         means2D, colors, depths, depth_vars, conic_opacity,
         final_T, n_contrib, bg_color,
         out_color, out_depth,

@@ -145,11 +145,21 @@ __forceinline__ __device__ bool in_frustum(int idx,
 {
 	float3 p_orig = { orig_points[3 * idx], orig_points[3 * idx + 1], orig_points[3 * idx + 2] };
 
+	// Check for NaN/Inf in original point
+	if (!isfinite(p_orig.x) || !isfinite(p_orig.y) || !isfinite(p_orig.z)) {
+		return false;
+	}
+
 	// Bring points to screen space
 	float4 p_hom = transformPoint4x4(p_orig, projmatrix);
 	float p_w = 1.0f / (p_hom.w + 0.0000001f);
 	float3 p_proj = { p_hom.x * p_w, p_hom.y * p_w, p_hom.z * p_w };
 	p_view = transformPoint4x3(p_orig, viewmatrix);
+
+	// Check for NaN/Inf in view space position
+	if (!isfinite(p_view.x) || !isfinite(p_view.y) || !isfinite(p_view.z)) {
+		return false;
+	}
 
 	if (p_view.z <= 0.2f)// || ((p_proj.x < -1.3 || p_proj.x > 1.3 || p_proj.y < -1.3 || p_proj.y > 1.3)))
 	{

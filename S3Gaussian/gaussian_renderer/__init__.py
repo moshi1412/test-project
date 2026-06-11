@@ -157,6 +157,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     features_precomp = None
     # Concatenate the pre-computation colors and CLIP features indices
     # render_feat = True
+    # print('rasterization return')
     if render_feat and "fine" in stage:
         colors_precomp = feat
         shs_final = None

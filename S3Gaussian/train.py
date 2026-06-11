@@ -10,9 +10,15 @@
 #
 
 import os
+# os.environ["TORCH_USE_CUDA_DSA"] = "1"
+# os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import gc
 import random
 import torch
+import ctypes
+# libcudart = ctypes.CDLL('libcudart.so')
+# ret = libcudart.cudaDeviceSetLimit(0x00, 16384) 
 from random import randint
 from utils.loss_utils import l1_loss, ssim, l2_loss, compute_depth
 from gaussian_renderer import render, network_gui
@@ -371,6 +377,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
         viewspace_point_tensor_list = []
         for viewpoint_cam in viewpoint_cams:
             render_pkg = render(viewpoint_cam, gaussians, pipe, background, stage=stage,return_dx=True,render_feat = True if ('fine' in stage and args.feat_head) else False)
+            # print("render return")
             image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
             depth_pred = render_pkg["depth"]
             depth_preds.append(depth_pred.unsqueeze(0))
@@ -504,6 +511,34 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                     
                     gaussians.densify(densify_threshold, opacity_threshold, scene.cameras_extent, size_threshold, 5, 5, scene.model_path, iteration, stage)
+                    
+                    # Check for NaN/Inf after densification
+                    with torch.no_grad():
+                        xyz_nan = torch.isnan(gaussians._xyz).any()
+                        xyz_inf = torch.isinf(gaussians._xyz).any()
+                        scales_nan = torch.isnan(gaussians._scaling).any()
+                        scales_inf = torch.isinf(gaussians._scaling).any()
+                        rot_nan = torch.isnan(gaussians._rotation).any()
+                        rot_inf = torch.isinf(gaussians._rotation).any()
+                        if xyz_nan or xyz_inf or scales_nan or scales_inf or rot_nan or rot_inf:
+                            print(f"[WARNING] Iter {iteration}: NaN/Inf detected after densification")
+                            print(f"  xyz: NaN={xyz_nan}, Inf={xyz_inf}")
+                            print(f"  scales: NaN={scales_nan}, Inf={scales_inf}")
+                            print(f"  rotation: NaN={rot_nan}, Inf={rot_inf}")
+                            # Remove invalid gaussians
+                            valid_mask = ~torch.isnan(gaussians._xyz).any(dim=1) & ~torch.isinf(gaussians._xyz).any(dim=1)
+                            valid_mask &= ~torch.isnan(gaussians._scaling).any(dim=1) & ~torch.isinf(gaussians._scaling).any(dim=1)
+                            valid_mask &= ~torch.isnan(gaussians._rotation).any(dim=1) & ~torch.isinf(gaussians._rotation).any(dim=1)
+                            print(f"  Removing {gaussians._xyz.shape[0] - valid_mask.sum().item()} invalid gaussians")
+                            gaussians._xyz = gaussians._xyz[valid_mask]
+                            gaussians._scaling = gaussians._scaling[valid_mask]
+                            gaussians._rotation = gaussians._rotation[valid_mask]
+                            gaussians._opacity = gaussians._opacity[valid_mask]
+                            gaussians._features_dc = gaussians._features_dc[valid_mask]
+                            gaussians._features_rest = gaussians._features_rest[valid_mask]
+                            gaussians.max_radii2D = gaussians.max_radii2D[valid_mask]
+                            gaussians.xyz_gradient_accum = gaussians.xyz_gradient_accum[valid_mask]
+                            gaussians.densification_counter = gaussians.densification_counter[valid_mask]
                 if  iteration > opt.pruning_from_iter and iteration % opt.pruning_interval == 0 : # and gaussians.get_xyz.shape[0]>200000
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
 
@@ -725,6 +760,7 @@ def setup_seed(seed):
 if __name__ == "__main__":
     # Set up command line argument parser
     # torch.set_default_tensor_type('torch.FloatTensor')
+    
     torch.cuda.empty_cache()
     parser = ArgumentParser(description="Training script parameters")
     setup_seed(6666)

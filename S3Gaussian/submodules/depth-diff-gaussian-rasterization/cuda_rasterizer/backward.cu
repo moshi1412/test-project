@@ -14,14 +14,14 @@
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
 namespace cg = cooperative_groups;
-#define MAX_CONTRIB_PER_PIXEL 128
+#define MAX_CONTRIB_PER_PIXEL 32
 __global__ void depthvarToCov3DGradient(
     int P,
     const float* dL_ddepthvar,   // 每个高斯的方差梯度
     const float* viewmatrix,     // 视图矩阵
     float* dL_dcov3D)            // 累加目标（6 个值 per Gaussian）
 {
-    auto idx = cg::this_grid().thread_rank();
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= P) return;
 
     float grad_var = dL_ddepthvar[idx];
@@ -239,7 +239,7 @@ __global__ void computeCov2DCUDA(int P,
 	float3* dL_dmeans,
 	float* dL_dcov)
 {
-	auto idx = cg::this_grid().thread_rank();
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx >= P || !(radii[idx] > 0))
 		return;
 
@@ -452,7 +452,7 @@ __global__ void preprocessCUDA(
 	glm::vec3* dL_dscale,
 	glm::vec4* dL_drot)
 {
-	auto idx = cg::this_grid().thread_rank();
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx >= P || !(radii[idx] > 0))
 		return;
 
@@ -529,18 +529,17 @@ renderCUDA(
     float* __restrict__ dL_ddepths,
 	float* dL_ddepthvar)
 {
-    auto block = cg::this_thread_block();
     const uint32_t horizontal_blocks = (W + BLOCK_X - 1) / BLOCK_X;
-    const uint2 pix_min = { block.group_index().x * BLOCK_X, block.group_index().y * BLOCK_Y };
+    const uint2 pix_min = { blockIdx.x * BLOCK_X, blockIdx.y * BLOCK_Y };
     const uint2 pix_max = { min(pix_min.x + BLOCK_X, W), min(pix_min.y + BLOCK_Y, H) };
-    const uint2 pix = { pix_min.x + block.thread_index().x, pix_min.y + block.thread_index().y };
+    const uint2 pix = { pix_min.x + threadIdx.x, pix_min.y + threadIdx.y };
     const uint32_t pix_id = W * pix.y + pix.x;
     const float2 pixf = { (float)pix.x, (float)pix.y };
     const bool inside = (pix.x < W && pix.y < H);
 
     if (!inside) return;
 
-    const uint2 range = ranges[block.group_index().y * horizontal_blocks + block.group_index().x];
+    const uint2 range = ranges[blockIdx.y * horizontal_blocks + blockIdx.x];
     const int rounds = (range.y - range.x + BLOCK_SIZE - 1) / BLOCK_SIZE;
     int toDo = range.y - range.x;
 
@@ -548,7 +547,7 @@ renderCUDA(
     float local_depths[MAX_CONTRIB_PER_PIXEL];
     float local_vars[MAX_CONTRIB_PER_PIXEL];
     float local_alphas[MAX_CONTRIB_PER_PIXEL];
-    int local_gids[MAX_CONTRIB_PER_PIXEL];
+    // int local_gids[MAX_CONTRIB_PER_PIXEL];  // Unused, commented out
     int local_cnt = 0;
 
     // 共享内存
@@ -579,23 +578,22 @@ renderCUDA(
     const float ddely_dy = 0.5f * H;
 
     // 收集 pass：遍历 tile 中所有高斯，收集到局部数组（用于深度梯度计算）
-    if (dL_dpixel_depth != 0.0f) {
-        int remaining = range.y - range.x;
-        int collect_rounds = (remaining + BLOCK_SIZE - 1) / BLOCK_SIZE;
-        for (int r = 0; r < collect_rounds; r++) {
-            block.sync();
-            int toDo_this = min(BLOCK_SIZE, remaining - r * BLOCK_SIZE);
-            if (toDo_this <= 0) break;
-            int progress = r * BLOCK_SIZE + block.thread_rank();
-            if (range.x + progress < range.y) {
-                int coll_id = point_list[range.x + progress];
-                collected_id[block.thread_rank()] = coll_id;
-                collected_xy[block.thread_rank()] = points_xy_image[coll_id];
-                collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
-                collected_depths[block.thread_rank()] = depths[coll_id];
-                collected_depth_vars[block.thread_rank()] = depth_vars[coll_id];
-            }
-            block.sync();
+    int remaining = range.y - range.x;
+    int collect_rounds = (remaining + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    for (int r = 0; r < collect_rounds; r++) {
+        __syncthreads();
+        int toDo_this = min(BLOCK_SIZE, remaining - r * BLOCK_SIZE);
+        int progress = r * BLOCK_SIZE + (threadIdx.y * BLOCK_X + threadIdx.x);
+        if (dL_dpixel_depth != 0.0f && toDo_this > 0 && range.x + progress < range.y) {
+            int coll_id = point_list[range.x + progress];
+            collected_id[threadIdx.y * BLOCK_X + threadIdx.x] = coll_id;
+            collected_xy[threadIdx.y * BLOCK_X + threadIdx.x] = points_xy_image[coll_id];
+            collected_conic_opacity[threadIdx.y * BLOCK_X + threadIdx.x] = conic_opacity[coll_id];
+            collected_depths[threadIdx.y * BLOCK_X + threadIdx.x] = depths[coll_id];
+            collected_depth_vars[threadIdx.y * BLOCK_X + threadIdx.x] = depth_vars[coll_id];
+        }
+        __syncthreads();
+        if (dL_dpixel_depth != 0.0f && toDo_this > 0) {
             for (int j = 0; j < toDo_this; j++) {
                 float2 xy = collected_xy[j];
                 float2 d = { xy.x - pixf.x, xy.y - pixf.y };
@@ -605,7 +603,7 @@ renderCUDA(
                 float alpha = min(0.99f, con_o.w * expf(power));
                 if (alpha < 1.0f / 255.0f) continue;
                 if (local_cnt < MAX_CONTRIB_PER_PIXEL) {
-                    local_gids[local_cnt] = collected_id[j];
+                    // local_gids[local_cnt] = collected_id[j];  // Unused, commented out
                     local_depths[local_cnt] = collected_depths[j];
                     local_vars[local_cnt] = collected_depth_vars[j];
                     local_alphas[local_cnt] = alpha;
@@ -617,24 +615,23 @@ renderCUDA(
 
     // 第一遍：颜色梯度（与原版相同）
     for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE) {
-        block.sync();
-        const int progress = i * BLOCK_SIZE + block.thread_rank();
+        __syncthreads();
+        const int progress = i * BLOCK_SIZE + (threadIdx.y * BLOCK_X + threadIdx.x);
         if (range.x + progress < range.y) {
             const int coll_id = point_list[range.y - progress - 1];
-            collected_id[block.thread_rank()] = coll_id;
-            collected_xy[block.thread_rank()] = points_xy_image[coll_id];
-            collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
+            collected_id[threadIdx.y * BLOCK_X + threadIdx.x] = coll_id;
+            collected_xy[threadIdx.y * BLOCK_X + threadIdx.x] = points_xy_image[coll_id];
+            collected_conic_opacity[threadIdx.y * BLOCK_X + threadIdx.x] = conic_opacity[coll_id];
             for (int c = 0; c < C; c++)
-                collected_colors[c * BLOCK_SIZE + block.thread_rank()] = colors[coll_id * C + c];
-            collected_depths[block.thread_rank()] = depths[coll_id];
-            collected_depth_vars[block.thread_rank()] = depth_vars[coll_id];
+                collected_colors[c * BLOCK_SIZE + (threadIdx.y * BLOCK_X + threadIdx.x)] = colors[coll_id * C + c];
+            collected_depths[threadIdx.y * BLOCK_X + threadIdx.x] = depths[coll_id];
+            collected_depth_vars[threadIdx.y * BLOCK_X + threadIdx.x] = depth_vars[coll_id];
         }
-        block.sync();
+        __syncthreads();
 
         for (int j = 0; j < min(BLOCK_SIZE, toDo); j++) {
             if (contributor <= 0) break;
             contributor--;
-            if (contributor >= last_contributor) continue;
 
             const float2 xy = collected_xy[j];
             const float2 d = { xy.x - pixf.x, xy.y - pixf.y };
@@ -688,7 +685,7 @@ renderCUDA(
     }
 
     // 第二遍：中位数深度梯度（公式 10）
-    if (dL_dpixel_depth != 0.0f) {
+    if (dL_dpixel_depth != 0.0f && local_cnt > 0) {
 		float d_med = 0.5f * (median_left_depth[pix_id] + median_right_depth[pix_id]);
         uint32_t left_gid = median_left_gid[pix_id];
         uint32_t right_gid = median_right_gid[pix_id];
@@ -703,7 +700,10 @@ renderCUDA(
 		}
 		float T_total = expf(-total_cdf_diff);
 		float dT_total_dd = -T_total * sum_alpha_pdf;
-		float factor = dL_dpixel_depth / dT_total_dd;   // 公因子 ∂d/∂L 的分母部分
+		
+		// 避免除以零
+		if (fabsf(dT_total_dd) > 1e-6f) {
+			float factor = dL_dpixel_depth / dT_total_dd;   // 公因子 ∂d/∂L 的分母部分
 
     // 然后对左右两个高斯计算梯度（也可以对所有高斯计算，但左右是主要的）
 
@@ -738,6 +738,7 @@ renderCUDA(
 			float alpha_l = conic_opacity[left_gid].w;
 			apply_gradient(left_gid, mean_l, var_l, alpha_l);
 		}
+		}  // end if (fabsf(dT_total_dd) > 1e-6f)
     }
 }
 
@@ -781,6 +782,10 @@ void BACKWARD::render(
         dL_dmean2D, dL_dconic2D,
         dL_dopacity, dL_dcolors, dL_ddepths,
         dL_ddepthvar);   // 传递
+
+    // DEBUG: Backward kernel launch done, sync and check
+    cudaDeviceSynchronize();
+    // printf("[renderCUDA] BACKWARD END: kernel completed\n");
 }
 
 
