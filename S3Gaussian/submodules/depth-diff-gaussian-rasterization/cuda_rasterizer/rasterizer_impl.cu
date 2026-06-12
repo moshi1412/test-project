@@ -90,6 +90,13 @@ __global__ void duplicateWithKeys(
 
 		getRect(points_xy[idx], radii[idx], rect_min, rect_max, grid);
 
+		// Debug: Check tile coordinates
+		if (rect_min.x >= grid.x || rect_min.y >= grid.y || 
+		    rect_max.x >= grid.x || rect_max.y >= grid.y) {
+			printf("WARNING: duplicateWithKeys: idx=%d, rect_min=(%d,%d), rect_max=(%d,%d), grid=(%d,%d)\n", 
+			       idx, rect_min.x, rect_min.y, rect_max.x, rect_max.y, grid.x, grid.y);
+		}
+
 		// For each tile that the bounding rect overlaps, emit a 
 		// key/value pair. The key is |  tile ID  |      depth      |,
 		// and the value is the ID of the Gaussian. Sorting the values 
@@ -113,7 +120,7 @@ __global__ void duplicateWithKeys(
 // Check keys to see if it is at the start/end of one tile's range in 
 // the full sorted list. If yes, write start/end of this tile. 
 // Run once per instanced (duplicated) Gaussian ID.
-__global__ void identifyTileRanges(int L, uint64_t* point_list_keys, uint2* ranges)
+__global__ void identifyTileRanges(int L, uint64_t* point_list_keys, uint2* ranges, uint32_t num_tiles)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx >= L)
@@ -122,11 +129,26 @@ __global__ void identifyTileRanges(int L, uint64_t* point_list_keys, uint2* rang
 	// Read tile ID from key. Update start/end of tile range if at limit.
 	uint64_t key = point_list_keys[idx];
 	uint32_t currtile = key >> 32;
+	
+	// Boundary check to prevent out-of-bounds write
+	if (currtile >= num_tiles) {
+		printf("WARNING: currtile=%u exceeds num_tiles=%u at idx=%d, key=%llu\n", currtile, num_tiles, idx, (unsigned long long)key);
+		return;
+	}
+	
 	if (idx == 0)
 		ranges[currtile].x = 0;
 	else
 	{
-		uint32_t prevtile = point_list_keys[idx - 1] >> 32;
+		uint64_t prev_key = point_list_keys[idx - 1];
+		uint32_t prevtile = prev_key >> 32;
+		
+		// Boundary check for prevtile
+		if (prevtile >= num_tiles) {
+			printf("WARNING: prevtile=%u exceeds num_tiles=%u at idx=%d, prev_key=%llu\n", prevtile, num_tiles, idx, (unsigned long long)prev_key);
+			return;
+		}
+		
 		if (currtile != prevtile)
 		{
 			ranges[prevtile].y = idx;
@@ -171,12 +193,12 @@ CudaRasterizer::GeometryState CudaRasterizer::GeometryState::fromChunk(char*& ch
 	return geom;
 }
 
-CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char*& chunk, size_t N)
+CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char*& chunk, size_t N, size_t num_tiles)
 {
 	ImageState img;
 	obtain(chunk, img.accum_alpha, N, 128);
 	obtain(chunk, img.n_contrib, N, 128);
-	obtain(chunk, img.ranges, N, 128);
+	obtain(chunk, img.ranges, num_tiles, 128);  // ranges only needs num_tiles elements, not N
 	obtain(chunk, img.median_left_depth, N, 128);
 	obtain(chunk, img.median_right_depth, N, 128);
 	obtain(chunk, img.median_left_T, N, 128);
@@ -244,9 +266,10 @@ int CudaRasterizer::Rasterizer::forward(
 	dim3 block(BLOCK_X, BLOCK_Y, 1);
 
 	// Dynamically resize image-based auxiliary buffers during training
-	size_t img_chunk_size = required<ImageState>(width * height);
+	size_t num_tiles = tile_grid.x * tile_grid.y;
+	size_t img_chunk_size = required<ImageState>(width * height, num_tiles);
 	char* img_chunkptr = imageBuffer(img_chunk_size);
-	ImageState imgState = ImageState::fromChunk(img_chunkptr, width * height);
+	ImageState imgState = ImageState::fromChunk(img_chunkptr, width * height, num_tiles);
 
 	if (NUM_CHANNELS != 3 && colors_precomp == nullptr)
 	{
@@ -308,7 +331,8 @@ int CudaRasterizer::Rasterizer::forward(
 		identifyTileRanges << <(num_rendered + 255) / 256, 256 >> > (
 			num_rendered,
 			binningState.point_list_keys,
-			imgState.ranges);
+			imgState.ranges,
+			num_tiles);
 	CHECK_CUDA(, debug)
 
 	// Let each tile blend its range of Gaussians independently in parallel
@@ -380,7 +404,10 @@ void CudaRasterizer::Rasterizer::backward(
 {
     GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
     BinningState binningState = BinningState::fromChunk(binning_buffer, R);
-    ImageState imgState = ImageState::fromChunk(img_buffer, width * height);
+    
+    const dim3 tile_grid((width + BLOCK_X - 1) / BLOCK_X, (height + BLOCK_Y - 1) / BLOCK_Y, 1);
+    size_t num_tiles = tile_grid.x * tile_grid.y;
+    ImageState imgState = ImageState::fromChunk(img_buffer, width * height, num_tiles);
 
 	if (radii == nullptr)
 	{
@@ -390,7 +417,6 @@ void CudaRasterizer::Rasterizer::backward(
 	const float focal_y = height / (2.0f * tan_fovy);
 	const float focal_x = width / (2.0f * tan_fovx);
 
-	const dim3 tile_grid((width + BLOCK_X - 1) / BLOCK_X, (height + BLOCK_Y - 1) / BLOCK_Y, 1);
 	const dim3 block(BLOCK_X, BLOCK_Y, 1);
 
 	// Compute loss gradients w.r.t. 2D mean position, conic matrix,

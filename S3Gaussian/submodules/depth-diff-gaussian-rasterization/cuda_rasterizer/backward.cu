@@ -530,6 +530,15 @@ renderCUDA(
 	float* dL_ddepthvar)
 {
     const uint32_t horizontal_blocks = (W + BLOCK_X - 1) / BLOCK_X;
+    
+    // Debug: Print kernel configuration at startup
+    if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
+        printf("DEBUG: renderCUDA launched with W=%d, H=%d, horizontal_blocks=%u, BLOCK_X=%d, BLOCK_Y=%d\n", 
+               W, H, horizontal_blocks, BLOCK_X, BLOCK_Y);
+        printf("DEBUG: tile_grid.x=%u, tile_grid.y=%u\n", 
+               (W + BLOCK_X - 1) / BLOCK_X, (H + BLOCK_Y - 1) / BLOCK_Y);
+    }
+    
     const uint2 pix_min = { blockIdx.x * BLOCK_X, blockIdx.y * BLOCK_Y };
     const uint2 pix_max = { min(pix_min.x + BLOCK_X, W), min(pix_min.y + BLOCK_Y, H) };
     const uint2 pix = { pix_min.x + threadIdx.x, pix_min.y + threadIdx.y };
@@ -539,9 +548,28 @@ renderCUDA(
 
     if (!inside) return;
 
-    const uint2 range = ranges[blockIdx.y * horizontal_blocks + blockIdx.x];
+    // Debug: Check ranges access
+    uint32_t range_idx = blockIdx.y * horizontal_blocks + blockIdx.x;
+    uint32_t max_range_idx = ((H + BLOCK_Y - 1) / BLOCK_Y) * horizontal_blocks;
+    if (range_idx >= max_range_idx) {
+        printf("ERROR: ranges access out of bounds! range_idx=%u, max_range_idx=%u, blockIdx=(%d,%d), horizontal_blocks=%u\n", 
+               range_idx, max_range_idx, blockIdx.x, blockIdx.y, horizontal_blocks);
+        return;
+    }
+    const uint2 range = ranges[range_idx];
     const int rounds = (range.y - range.x + BLOCK_SIZE - 1) / BLOCK_SIZE;
     int toDo = range.y - range.x;
+
+    // Debug: Check for NaN/Inf in pixel coordinates and pix_id overflow
+    if (isnan(pixf.x) || isinf(pixf.x) || isnan(pixf.y) || isinf(pixf.y)) {
+        printf("WARNING: Invalid pixf at block=(%d,%d), thread=(%d,%d), pixf=(%f,%f), W=%d, H=%d\n",
+               blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y, pixf.x, pixf.y, W, H);
+    }
+    // Check pix_id overflow using division
+    if (pix.x >= W || pix.y >= H) {
+        printf("WARNING: pix out of range: pix=(%d,%d), W=%d, H=%d, pix_id=%u\n",
+               pix.x, pix.y, W, H, pix_id);
+    }
 
     // 局部数组：收集所有对当前像素有贡献的高斯（用于深度梯度计算）
     float local_depths[MAX_CONTRIB_PER_PIXEL];
@@ -563,12 +591,36 @@ renderCUDA(
     uint32_t contributor = toDo;
     const int last_contributor = n_contrib[pix_id];
 
+    // Debug: Check final_Ts pointer validity
+    if (pix_id >= (uint32_t)(W * H)) {
+        printf("ERROR: final_Ts access out of bounds! pix_id=%u, W*H=%d\n", pix_id, W*H);
+        return;
+    }
+    if (isnan(T_final) || isinf(T_final)) {
+        printf("WARNING: Invalid T_final at pix_id=%u: %f\n", pix_id, T_final);
+    }
+
     float accum_rec[C] = {0};
     float dL_dpixel[C];
     float dL_dpixel_depth;
     float accum_depth_rec = 0;
-    for (int i = 0; i < C; i++)
-        dL_dpixel[i] = dL_dpixels[i * H * W + pix_id];
+    
+    // Debug: Check dL_dpixel access
+    for (int i = 0; i < C; i++) {
+        int idx = i * H * W + pix_id;
+        if (idx < 0 || idx >= C * H * W) {
+            printf("ERROR: dL_dpixels access out of bounds! idx=%d, C*H*W=%d, i=%d, H=%d, W=%d, pix_id=%u\n", 
+                   idx, C*H*W, i, H, W, pix_id);
+            return;
+        }
+        dL_dpixel[i] = dL_dpixels[idx];
+    }
+    
+    // Debug: Check dL_dpixel_depths access
+    if (pix_id >= (uint32_t)(H * W)) {
+        printf("ERROR: dL_dpixel_depths access out of bounds! pix_id=%u, H*W=%d\n", pix_id, H*W);
+        return;
+    }
     dL_dpixel_depth = dL_dpixel_depths[pix_id];
 
     float last_alpha = 0;
@@ -686,7 +738,12 @@ renderCUDA(
 
     // 第二遍：中位数深度梯度（公式 10）
     if (dL_dpixel_depth != 0.0f && local_cnt > 0) {
-		float d_med = 0.5f * (median_left_depth[pix_id] + median_right_depth[pix_id]);
+        // Debug: Check if pix_id is within valid range
+        if (pix_id >= (uint32_t)(W * H)) {
+            printf("ERROR: pix_id=%u exceeds W*H=%d in median gradient!\n", pix_id, W*H);
+            return;
+        }
+        float d_med = 0.5f * (median_left_depth[pix_id] + median_right_depth[pix_id]);
         uint32_t left_gid = median_left_gid[pix_id];
         uint32_t right_gid = median_right_gid[pix_id];
         float sum_alpha_pdf = 0.0f;

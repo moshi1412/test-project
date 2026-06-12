@@ -57,7 +57,7 @@ namespace CudaRasterizer
 		uint32_t* median_left_gid;
 		uint32_t* median_right_gid;
 
-		static ImageState fromChunk(char*& chunk, size_t N);
+		static ImageState fromChunk(char*& chunk, size_t N, size_t num_tiles);
 	};
 
 	struct BinningState
@@ -72,6 +72,14 @@ namespace CudaRasterizer
 		static BinningState fromChunk(char*& chunk, size_t P);
 	};
 
+	template<typename T, typename... Args> 
+	size_t required(size_t P, Args... args)
+	{
+		char* size = nullptr;
+		T::fromChunk(size, P, args...);
+		return ((size_t)size) + 128;
+	}
+	
 	template<typename T> 
 	size_t required(size_t P)
 	{

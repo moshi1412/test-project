@@ -293,7 +293,17 @@ __global__ void preprocessCUDA(int P, int D, int M,
     radii[idx] = my_radius;
     points_xy_image[idx] = point_image;
     conic_opacity[idx] = { conic.x, conic.y, conic.z, opacities[idx] };
-    tiles_touched[idx] = (rect_max.y - rect_min.y) * (rect_max.x - rect_min.x);
+    
+    // Ensure valid tile count
+    if (!isfinite(rect_min.x) || !isfinite(rect_min.y) || 
+        !isfinite(rect_max.x) || !isfinite(rect_max.y)) {
+        tiles_touched[idx] = 0;
+    } else {
+        int tiles_x = rect_max.x - rect_min.x;
+        int tiles_y = rect_max.y - rect_min.y;
+        // Limit maximum touched tiles per Gaussian to prevent overflow
+        tiles_touched[idx] = (tiles_x > 0 && tiles_y > 0) ? min((int)(tiles_x * tiles_y), 1024) : 0;
+    }
 }
 
 // Main rendering kernel with strict volume rendering using erf

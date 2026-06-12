@@ -45,13 +45,20 @@ __forceinline__ __device__ float ndc2Pix(float v, int S)
 
 __forceinline__ __device__ void getRect(const float2 p, int max_radius, uint2& rect_min, uint2& rect_max, dim3 grid)
 {
+	// Check for NaN or Inf in pixel coordinates
+	if (!isfinite(p.x) || !isfinite(p.y)) {
+		rect_min = {0, 0};
+		rect_max = {0, 0};
+		return;
+	}
+	
 	rect_min = {
-		min(grid.x, max((int)0, (int)((p.x - max_radius) / BLOCK_X))),
-		min(grid.y, max((int)0, (int)((p.y - max_radius) / BLOCK_Y)))
+		min(grid.x - 1, max((int)0, (int)((p.x - max_radius) / BLOCK_X))),
+		min(grid.y - 1, max((int)0, (int)((p.y - max_radius) / BLOCK_Y)))
 	};
 	rect_max = {
-		min(grid.x, max((int)0, (int)((p.x + max_radius + BLOCK_X - 1) / BLOCK_X))),
-		min(grid.y, max((int)0, (int)((p.y + max_radius + BLOCK_Y - 1) / BLOCK_Y)))
+		min(grid.x - 1, max((int)0, (int)((p.x + max_radius + BLOCK_X - 1) / BLOCK_X))),
+		min(grid.y - 1, max((int)0, (int)((p.y + max_radius + BLOCK_Y - 1) / BLOCK_Y)))
 	};
 }
 
