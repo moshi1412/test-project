@@ -75,23 +75,18 @@ class Deformation(nn.Module):
                 nn.Linear(feature_mlp_layer_width, feature_embedding_dim),
             )
 
+    # 在 deformation.py 的 Deformation 类中
     def query_time(self, rays_pts_emb, scales_emb, rotations_emb, time_feature, time_emb):
-
         if self.no_grid:
-            h = torch.cat([rays_pts_emb[:,:3],time_emb[:,:1]],-1)
+            h = torch.cat([rays_pts_emb[:,:3], time_emb[:,:1]], -1)
+            grid_feature = torch.zeros_like(h)  # 占位
         else:
-            # 这里是 hexplane的forward 得到 feature [N, 128]
             grid_feature = self.grid(rays_pts_emb[:,:3], time_emb[:,:1])
-            # breakpoint()
             if self.grid_pe > 1:
-                grid_feature = poc_fre(grid_feature,self.grid_pe)
-            hidden = torch.cat([grid_feature],-1) 
-        
-        
-        hidden = self.feature_out(hidden)   # [N,64]
- 
-
-        return hidden
+                grid_feature = poc_fre(grid_feature, self.grid_pe)
+            hidden = torch.cat([grid_feature], -1)
+        hidden = self.feature_out(hidden)
+        return hidden, grid_feature
     @property
     def get_empty_ratio(self):
         return self.ratio
@@ -104,10 +99,10 @@ class Deformation(nn.Module):
     def forward_static(self, rays_pts_emb):
         grid_feature = self.grid(rays_pts_emb[:,:3])
         dx = self.static_mlp(grid_feature)
-        return rays_pts_emb[:, :3] + dx
+        return rays_pts_emb[:, :3] + dx,grid_feature
     def forward_dynamic(self,rays_pts_emb, scales_emb, rotations_emb, opacity_emb, shs_emb, time_feature, time_emb):
         # TODO: 这个hidden 应该考虑前后t
-        hidden = self.query_time(rays_pts_emb, scales_emb, rotations_emb, time_feature, time_emb)
+        hidden, grid_feature = self.query_time(rays_pts_emb, scales_emb, rotations_emb, time_feature, time_emb)
         # TODO: 这里需要重新考虑，如何得到静态的mask
         if self.args.static_mlp:
             mask = self.static_mlp(hidden)
@@ -163,7 +158,7 @@ class Deformation(nn.Module):
         feat = None
         if self.args.feat_head:
             feat = self.dino_head(hidden)
-        return pts, scales, rotations, opacity, shs, dx, feat, dshs
+        return pts, scales, rotations, opacity, shs, dx, feat, dshs,grid_feature
     def get_mlp_parameters(self):
         parameter_list = []
         for name, param in self.named_parameters():
@@ -221,14 +216,14 @@ class deform_network(nn.Module):
         
         ## time_emb = poc_fre(times_sel, self.time_poc)
         ## times_feature = self.timenet(time_emb)
-        means3D, scales, rotations, opacity, shs, dx, feat, dshs = self.deformation_net( point_emb,
+        means3D, scales, rotations, opacity, shs, dx, feat, dshs ,grid_feature = self.deformation_net( point_emb,
                                                   scales_emb,
                                                 rotations_emb,
                                                 opacity,
                                                 shs,
                                                 None,
                                                 times_sel) # [N, 1]
-        return means3D, scales, rotations, opacity, shs, dx , feat, dshs
+        return means3D, scales, rotations, opacity, shs, dx , feat, dshs,grid_feature
     def get_mlp_parameters(self):
         return self.deformation_net.get_mlp_parameters() + list(self.timenet.parameters())
     def get_grid_parameters(self):

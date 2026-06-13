@@ -11,7 +11,7 @@ import copy
 def render_training_image(scene, gaussians, viewpoints, render_func, pipe, background, stage, iteration, time_now):
     def render(gaussians, viewpoint, path, scaling):
         # scaling_copy = gaussians._scaling
-        render_pkg = render_func(viewpoint, gaussians, pipe, background, stage=stage)
+        render_pkg = render_func(viewpoint, iteration,gaussians, pipe, background, stage=stage)
         label1 = f"stage:{stage},iter:{iteration}"
         times =  time_now/60
         if times < 1:

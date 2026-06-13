@@ -124,6 +124,8 @@ class OptimizationParams(ParamGroup):
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
         self.lambda_depth = 0.0
+        self.lambda_freq = 0.01
+        # self.use_fags = False
         self.densification_interval = 100   # 100
         self.opacity_reset_interval = 3000
         self.pruning_interval = 100
@@ -232,7 +234,7 @@ class ModelHiddenParams(ParamGroup):
         self.static_mlp=False
         self.apply_rotation=False
 
-        self.use_fags = False
+        self.use_fags = True
         
         super().__init__(parser, "ModelHiddenParams")
 

@@ -73,6 +73,7 @@ def get_robust_pca(features: torch.Tensor, m: float = 2, remove_first_component=
 
 def render_pixels(
     viewpoint_stack,
+    iter,
     gaussians,
     bg,
     pipe,
@@ -92,6 +93,7 @@ def render_pixels(
     # set up render function
     render_results = render_func(
         viewpoint_stack,
+        iter,
         gaussians,
         pipe,
         bg,
@@ -115,6 +117,7 @@ def render_pixels(
 
 def render_func(
     viewpoint_stack,
+    iter,
     gaussians,
     pipe,
     bg,
@@ -170,7 +173,7 @@ def render_func(
         for i in tqdm(range(len(viewpoint_stack)), desc=f"rendering full data", dynamic_ncols=True):
             viewpoint_cam = viewpoint_stack[i]
 
-            render_pkg = render(viewpoint_cam, gaussians, pipe, bg,return_decomposition = return_decomposition,return_dx=True)
+            render_pkg = render(viewpoint_cam, iter,gaussians, pipe, bg,return_decomposition = return_decomposition,return_dx=True)
             image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
             
             # ------------- rgb ------------- #
@@ -264,7 +267,7 @@ def render_func(
 
                     if t == len(dx_list)-num_cams-1 or t == len(dx_list)-num_cams-2 or t == len(dx_list)-num_cams-3: 
                         ff_color_last.append(ff_color)              
-                    render_pkg2 = render(viewpoint_stack[t], gaussians, pipe, bg, override_color=ff_color)
+                    render_pkg2 = render(viewpoint_stack[t],iter, gaussians, pipe, bg, override_color=ff_color)
                     ff_map = render_pkg2['render'].permute(1, 2, 0).cpu().numpy()
 
                     # print(ff_map.max())
@@ -281,20 +284,20 @@ def render_func(
                     if t == num_cams or t == num_cams+1 or t == num_cams+2: 
                         bf_color_first.append(bf_color)                 
                     # viewpoint_cam 要变化
-                    render_pkg2 = render(viewpoint_stack[t], gaussians, pipe, bg, override_color=bf_color)
+                    render_pkg2 = render(viewpoint_stack[t], iter, gaussians, pipe, bg, override_color=bf_color)
                     bf_map = render_pkg2['render'].permute(1, 2, 0).cpu().numpy()
 
                     backward_flows.append(bf_map)
 
             for i, bf_color in enumerate(bf_color_first):
-                render_pkg3 = render(viewpoint_stack[i], gaussians, pipe, bg, override_color=bf_color)            
+                render_pkg3 = render(viewpoint_stack[i], iter, gaussians, pipe, bg, override_color=bf_color)            
                 bf_map_first = render_pkg3['render'].permute(1, 2, 0).cpu().numpy()       
                 # 对于 backward flow 的第一个时刻，复制第一个计算的 forward flow
                 backward_flows.insert(i, bf_map_first)
 
             for i, ff_color in enumerate(ff_color_last):
                 # 对于 forward flow 的最后一个时刻，复制最后一个计算的 backward flow
-                render_pkg4 = render(viewpoint_stack[len(viewpoint_stack)-num_cams+i], gaussians, pipe, bg, override_color=ff_color)            
+                render_pkg4 = render(viewpoint_stack[len(viewpoint_stack)-num_cams+i], iter, gaussians, pipe, bg, override_color=ff_color)            
                 ff_map_last = render_pkg4['render'].permute(1, 2, 0).cpu().numpy()       
                 forward_flows.append(ff_map_last)           
 

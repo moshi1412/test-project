@@ -70,9 +70,9 @@ class GaussianModel:
         self.setup_functions()
         self.use_fags = args.use_fags
         self.fags_deform=None
-        self.fags_kernel=None
+        # self.fags_kernel=None
         if self.use_fags:
-            self.fags_deform = FourierHighFreqDeform()
+            self.fags_deform = FourierHighFreqDeform(feat_dim=128, n_freqs=16, hidden_dim=128).to("cuda")
             # self.fags_kernel = FDGK()
 
     def init_fags_kernel(self):
@@ -96,6 +96,9 @@ class GaussianModel:
             self.denom,
             self.optimizer.state_dict(),
             self.spatial_lr_scale,
+            self.use_fags,
+            self.fags_deform,
+            # self.fags_kernel,
         )
     
     def restore(self, model_args, training_args):
@@ -114,12 +117,17 @@ class GaussianModel:
         xyz_gradient_accum, 
         denom,
         opt_dict, 
-        self.spatial_lr_scale) = model_args
+        self.spatial_lr_scale,
+        self.use_fags,
+        self.fags_deform,
+        # self.fags_kernel,
+        ) = model_args
         self._deformation.load_state_dict(deform_state)
         self.training_setup(training_args)
         self.xyz_gradient_accum = xyz_gradient_accum
         self.denom = denom
         self.optimizer.load_state_dict(opt_dict)
+        # Note: self.fags_deform is already correctly assigned from model_args at line 122
 
     @property
     def get_scaling(self):
@@ -197,7 +205,7 @@ class GaussianModel:
             
         ]
         if self.use_fags:
-            l.append({'params': self.fags_kernel.parameters(), 'lr': 2e-3})
+            l.append({'params': self.fags_deform.parameters(), 'lr': 2e-3,"name":"fags_deform"})
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,

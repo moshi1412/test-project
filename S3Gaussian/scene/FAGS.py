@@ -24,44 +24,53 @@ class FDGK(nn.Module):
 # 作用：给 Hexplane 输出做高频残差修正
 # ==============================
 class FourierHighFreqDeform(nn.Module):
-    def __init__(self, hidden_dim=64):
+    def __init__(self, feat_dim, n_freqs=16, hidden_dim=128):
         super().__init__()
-        self.hidden = hidden_dim
-
-        # 对 xyz + t 做轻量编码
-        self.embed = nn.Sequential(
-            nn.Linear(4, hidden_dim),
+        self.n_freqs = n_freqs
+        # 1. 点级自适应振幅生成器：输入 HexPlane 特征，输出振幅 [N, n_freqs]
+        self.amplitude_net = nn.Sequential(
+            nn.Linear(feat_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim)
+            nn.Linear(hidden_dim, n_freqs),
+            nn.Softplus()   # 保证正数
+        )
+        # 2. 预定义频率基 (几何级数，覆盖 1Hz 到 8Hz)
+        gamma = torch.exp(torch.linspace(0, 3, n_freqs) * math.log(2))
+        self.register_buffer("gamma", gamma)   # [n_freqs]
+        # 3. 融合特征并预测 {η, Rx, Tx, Δr, Δs}
+        # 输入维度 = HexPlane特征 + 2*n_freqs (sin+cos)
+        self.D_theta = nn.Sequential(
+            nn.Linear(feat_dim + 2 * n_freqs, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1 + 4 + 3 + 4+3)  # η, Rx, Tx, Δr(4), Δs(3)
         )
 
-        # 傅里叶频率
-        self.register_buffer("freqs", torch.exp(torch.linspace(math.log(1), math.log(32), 32)))
-
-        # 输出：delta_pos (3) + delta_rot (4) + delta_scale (3)
-        self.out = nn.Linear(hidden_dim + 64, 10)
-
-    def forward(self, xyz, t):
-        B = xyz.shape[0]
-        xyt = torch.cat([xyz, t.view(B,1)], dim=-1)
-
-        # 基础特征
-        feat = self.embed(xyt)
-
-        # 傅里叶时序特征
-        t_ = t.view(B,1)
-        sin = torch.sin(2 * math.pi * self.freqs.view(1,-1) * t_)
-        cos = torch.cos(2 * math.pi * self.freqs.view(1,-1) * t_)
-        fre = torch.cat([sin, cos], dim=-1)
-
-        # 融合
-        full = torch.cat([feat, fre], dim=-1)
-        deform = self.out(full)
-
-        dx = deform[..., 0:3]
-        dr = deform[..., 3:7]
-        ds = deform[..., 7:10]
-        return dx, dr, ds
+    def forward(self, grid_feat, t):
+        """
+        grid_feat: [N, feat_dim]  来自 HexPlane 的特征
+        t: [N, 1]  时间（已归一化到 [0,1] 或原始范围）
+        """
+        # 振幅
+        amps = self.amplitude_net(grid_feat)          # [N, M] M=16
+        # 频率基 sin(2πγt), cos(2πγt)
+        sin_feat = torch.sin(2 * math.pi * self.gamma.unsqueeze(0) * t)   # [N, M]
+        cos_feat = torch.cos(2 * math.pi * self.gamma.unsqueeze(0) * t)   # [N, M]
+        # 振幅加权
+        weighted_sin = amps * sin_feat
+        weighted_cos = amps * cos_feat
+        f_fre = torch.cat([weighted_sin, weighted_cos], dim=-1)   # [N, 2M]
+        # 拼接 HexPlane 特征与频域特征
+        feat_full = torch.cat([grid_feat, f_fre], dim=-1)         # [N, feat_dim+2M] 128+32=160
+        out = self.D_theta(feat_full)
+        eta = torch.sigmoid(out[:, 0:1])
+        Rx_raw = out[:, 1:5]
+        Rx = F.normalize(Rx_raw, dim=-1)
+        Tx = out[:, 5:8]
+        dr = out[:, 8:12]        # 4维
+        ds = out[:, 12:15]       # 3维
+        return eta, Rx, Tx, dr, ds #1  4 3 4 3
 
 # ==============================
 # 3. 频域损失 FFT Loss

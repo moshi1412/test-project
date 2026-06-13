@@ -20,7 +20,7 @@ from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
 from time import time as get_time
 
-def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None, stage="fine",return_decomposition=False,return_dx=False,render_feat=False):
+def render(viewpoint_camera,iter, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None, stage="fine",return_decomposition=False,return_dx=False,render_feat=False):
     """
     Render the scene. 
     
@@ -80,22 +80,41 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         rotations = pc._rotation
     deformation_point = pc._deformation_table
     if "coarse" in stage:
-        means3D_final, scales_final, rotations_final, opacity_final, shs_final = means3D, scales, rotations, opacity, shs
+        means3D_final, scales_final, rotations_final, opacity_final, shs_final= means3D, scales, rotations, opacity, shs
+
+        N=means3D.shape[0]
+        grid_feature = torch.zeros(N,128,device="cuda")
     elif "fine" in stage:
         # time0 = get_time()
         # means3D_deform, scales_deform, rotations_deform, opacity_deform = pc._deformation(means3D[deformation_point], scales[deformation_point], 
         #                                                                  rotations[deformation_point], opacity[deformation_point],
         #                                                                  time[deformation_point])
-        means3D_final, scales_final, rotations_final, opacity_final, shs_final, dx, feat, dshs = pc._deformation(means3D, scales, 
+        means3D_final, scales_final, rotations_final, opacity_final, shs_final, dx, feat, dshs ,grid_feature = pc._deformation(means3D, scales, 
                                                                  rotations, opacity, shs,
                                                                  time)
+        
         if pc.use_fags:
-            if pc.fags_kernel is None:
-                pc.init_fags_kernel()
-            dx, dr, ds = pc.fags_deform(means3D_final, time)
-            means3D_final = means3D_final + dx
-            rotations_final = rotations_final + dr
-            scales_final = scales_final + ds
+            # # if pc.fags_kernel is None:
+            # #     pc.init_fags_kernel()
+            # dx, dr, ds = pc.fags_deform(means3D_final, time)
+            # means3D_final = means3D_final + dx
+            # rotations_final = rotations_final + dr
+            # scales_final = scales_final + ds
+
+            eta, Rx, Tx, dr_high, ds_high = pc.fags_deform(grid_feature, time)
+            # # 按照论文公式 μ' = η * Rx * μ + η * Tx
+            # # 这里 μ 是基础变形后的位置 means3D_final（但论文中 μ 是原始位置？为了与现有 pipeline 兼容，
+            # # 我们选择对基础形变做增量调整：将额外的高频残差加上去，并用门控控制幅度）
+            # # 简化版本（与之前类似）：
+            # means3D_final = means3D_final + eta * Tx + (eta * (Rx - torch.eye(3, device=Rx.device).unsqueeze(0)) @ means3D_final.unsqueeze(-1)).squeeze(-1)
+
+            # rotations_final = rotations_final + eta * dr_high
+            # scales_final = scales_final + eta * ds_high
+            dx_high = Tx   # 简化处理
+            means3D_final = means3D_final + eta * dx_high
+            rotations_final = rotations_final + eta * dr_high
+            scales_final = scales_final + eta * ds_high
+            
     else:
         raise NotImplementedError
 

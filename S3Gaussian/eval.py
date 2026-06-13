@@ -47,6 +47,35 @@ from scene.FAGS import frequency_loss
 
 to8b = lambda x : (255*np.clip(x.cpu().numpy(),0,1)).astype(np.uint8)
 
+def translate_cameras(camera_list, translation):
+    """
+    对相机列表应用平移变换
+    translation: (x, y, z) 平移向量，例如 (-1, 0, 0) 表示向左平移1米
+    """
+    translation_tensor = torch.tensor(translation, dtype=torch.float32, device="cuda")
+    for cam in camera_list:
+        # world_view_transform 是 w2c 矩阵 (4x4)
+        # 为了让相机向左移动1米，我们需要在世界坐标系中添加平移
+        # 即修改 w2c 矩阵，使其相当于相机位置向左移动了1米
+        w2c = cam.world_view_transform.clone()
+        
+        # 直接在 w2c 的最后一列添加平移
+        # 这会改变相机中心的位置
+        w2c[3, :3] += translation_tensor
+        
+        # 重新计算 full_proj_transform
+        cam.world_view_transform = w2c
+        cam.full_proj_transform = (w2c.unsqueeze(0).bmm(cam.projection_matrix.unsqueeze(0))).squeeze(0)
+        
+        # 重新计算 camera_center (w2c 的逆矩阵的第3列前3个元素)
+        cam.camera_center = w2c.inverse()[3, :3]
+        
+        # 如果有 c2w 矩阵，也需要更新为 w2c 的逆
+        if cam.c2w is not None:
+            cam.c2w = w2c.inverse()
+    
+    return camera_list
+
 # try:
 #     from torch.utils.tensorboard import SummaryWriter
 #     TENSORBOARD_FOUND = True
@@ -82,7 +111,6 @@ def do_evaluation(
         print("Evaluating Test Set Pixels...")
         render_results = render_pixels(
             viewpoint_stack_test,
-            step,
             gaussians,
             bg,
             pipe,
@@ -130,7 +158,6 @@ def do_evaluation(
         print("Evaluating train Set Pixels...")
         render_results = render_pixels(
             viewpoint_stack_train,
-            step,
             gaussians,
             bg,
             pipe,
@@ -179,7 +206,6 @@ def do_evaluation(
         print("Evaluating Full Set...")
         render_results = render_pixels(
             viewpoint_stack_full,
-            step,
             gaussians,
             bg,
             pipe,
@@ -251,6 +277,13 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
         viewpoint_stack_full = scene.getFullCameras().copy()
         viewpoint_stack_test = scene.getTestCameras().copy()
         viewpoint_stack_train = scene.getTrainCameras().copy()
+        
+        # 向左平移1米进行外推评估 (translation = (-1, 0, 0))
+        translation = (-1.0, 0.0, 0.0)
+        print(f"Applying translation {translation} to cameras for extrapolation evaluation...")
+        viewpoint_stack_full = translate_cameras(viewpoint_stack_full, translation)
+        viewpoint_stack_test = translate_cameras(viewpoint_stack_test, translation)
+        viewpoint_stack_train = translate_cameras(viewpoint_stack_train, translation)
 
         # TODO：可视化光流 and 静动态点云分离
         do_evaluation(
@@ -380,7 +413,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
         visibility_filter_list = []
         viewspace_point_tensor_list = []
         for viewpoint_cam in viewpoint_cams:
-            render_pkg = render(viewpoint_cam, iteration,gaussians, pipe, background, stage=stage,return_dx=True,render_feat = True if ('fine' in stage and args.feat_head) else False)
+            render_pkg = render(viewpoint_cam, gaussians, pipe, background, stage=stage,return_dx=True,render_feat = True if ('fine' in stage and args.feat_head) else False)
             # print("render return")
             image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
             depth_pred = render_pkg["depth"]
@@ -566,10 +599,10 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
                 gaussians.optimizer.zero_grad(set_to_none = True)
 
             if (iteration in checkpoint_iterations):
-                save_path= "chkpnt" +f"_{stage}_" + str(iteration) + ".pth"
-                # for file in os.listdir(scene.model_path):
-                #     if file.endswith(".pth") and file != save_path:
-                #         os.remove(os.path.join(scene.model_path, file))
+                save_path= "chkpnt" +f"_{stage}_" + str(30000) + ".pth"
+                for file in os.listdir(scene.model_path):
+                    if file.endswith(".pth") and file != save_path:
+                        os.remove(os.path.join(scene.model_path, file))
 
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" +f"_{stage}_" + str(iteration) + ".pth")
@@ -783,11 +816,11 @@ if __name__ == "__main__":
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[ 14000, 20000, 30_000, 45000, 60000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[5_000,10_000,20_000,30_000,40_000,50_000])
-    parser.add_argument("--start_checkpoint", type=str, default ='/mnt/ljy/S3Gaussian/output/base/chkpnt_fine_50000.pth')
+    parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument("--expname", type=str, default = "waymo")
     parser.add_argument("--configs", type=str, default = "")
     parser.add_argument("--eval_only", action="store_true", help="perform evaluation only")
-    parser.add_argument("--prior_checkpoint", type=str, default =None)
+    parser.add_argument("--prior_checkpoint", type=str, default = None)
     parser.add_argument("--merge", action="store_true", help="merge gaussians")
     parser.add_argument("--prior_checkpoint2", type=str, default = None)
     # parser.add_argument("--use_fags", action="store_true")
